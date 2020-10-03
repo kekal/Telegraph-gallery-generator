@@ -19,6 +19,7 @@ HEIGHT = 2000
 SIZE = 9000000
 DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
+RESULTS_FILE_NAME = "results.txt"
 
 
 # ======================================================================
@@ -62,10 +63,10 @@ def validate_folder(__dir):
     else:
         try:
             if not os.path.exists(__dir):
-                print('Directory "' + str(__dir) + '" does not exist or not accessible.')
+                logger.fatal('Directory "' + str(__dir) + '" does not exist or not accessible.')
                 sys.exit()
         except TypeError:
-            print('Directory "' + str(__dir) + '" does not exist or not accessible.')
+            logger.fatal('Directory "' + str(__dir) + '" does not exist or not accessible.')
             sys.exit()
     return True
 
@@ -82,21 +83,24 @@ def read_validate_input() -> ReadArgs:
     if not validate_pause(args.pause):
         args.pause = 2
 
+    # if not validate_title(args.title):
+    #     args.title = HEADER_NAME
+
     return args
 
 
 def print_header(__args):
-    print('\n========================================================================\n========================================================================\n')
-    print('Starting in the directory: "' + __args.input_folder + '"')
-    print('Output directory:          "' + __args.output_folder + '"')
-    print('Upload pause:              ' + str(__args.pause) + ' seconds')
+    logger.info('\n========================================================================\n========================================================================\n')
+    logger.info('Starting in the directory: "' + __args.input_folder + '"')
+    logger.info('Output directory:          "' + __args.output_folder + '"')
+    logger.info('Upload pause:              ' + str(__args.pause) + ' seconds')
 
     if __args.height is not None:
-        print('Maximum image height:      ' + str(__args.height) + ' px')
+        logger.info('Maximum image height:      ' + str(__args.height) + ' px')
     if __args.width is not None:
-        print('Maximum image width:       ' + str(__args.width) + ' px')
+        logger.info('Maximum image width:       ' + str(__args.width) + ' px')
 
-    print("")
+    logger.info("")
 
 
 def get_sub_dirs_list(root_folder):
@@ -108,8 +112,12 @@ def get_sub_dirs_list(root_folder):
 def get_files_in_folder(__working_directory):
     __files = [name for name in os.listdir(__working_directory) if os.path.isfile(os.path.join(__working_directory, name))]
 
+    #for __root1, __dirs, __files in os.walk(__working_directory):
     return list(filter(lambda f: f.endswith(EXTENSIONS), __files))
 
+
+# def validate_title(__title):
+#     return not (__title is None or __title == "")
 
 
 def validate_pause(_pause):
@@ -118,6 +126,7 @@ def validate_pause(_pause):
 
 def parse_input():
     parser = argparse.ArgumentParser()
+    # parser.add_argument('-t', '--title', help='↑ Page title', required=True)
     parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str, required=True)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str, required=True)
@@ -130,6 +139,8 @@ def parse_input():
     args = parser.parse_args()
 
     __args = ReadArgs()
+
+    # __args.title = args.title
     __args.pause = args.pause
     __args.input_folder = args.input
     __args.output_folder = args.output
@@ -144,15 +155,15 @@ def upload_images(__file_names, __directory, __pause, __errors):
     image_paths = []
     for __file_name in __file_names:
         full_path = __directory + '\\' + __file_name
-        print("\nUploading: " + full_path)
+        logger.info("\nUploading: " + full_path)
         try:
             image_path = upload.upload_file(full_path)
         except BaseException as e:
-            print("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(e))
+            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(e))
             __errors.append(str(__file_name) + ' : ' + str(e))
             continue
 
-        print("Uploaded:  " + DOMAIN + image_path[0])
+        logger.info("Uploaded:  " + DOMAIN + image_path[0])
 
         move_image_to_output_folder(full_path, __directory, __file_name)
 
@@ -169,7 +180,7 @@ def remove_uploaded_folder(__directory):
         if not os.listdir(__directory):
             os.rmdir(__directory)
     except BaseException as e:
-        print("     " + str(e))
+        logger.error("     " + str(e))
 
 
 def move_image_to_output_folder(__old_path, __set_name, __file_name):
@@ -179,8 +190,10 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
             os.makedirs(old_folder)
 
         os.replace(__old_path, old_folder + '\\' + __file_name)
+        logger.info(__file_name + ' was moved to the ' + old_folder)
+
     except BaseException as e:
-        print("     " + str(e))
+        logger.error("     " + str(e))
 
 
 def create_page_body(__image_urls):
@@ -200,24 +213,24 @@ def post(__title, __body):
 
 def print_errors(__errors):
     if len(__errors) > 0:
-        print("\nErrors list:")
+        logger.info("\nErrors list:")
         for err in __errors:
-            print("   " + err)
+            logger.info("   " + err)
 
 
 def analyze_folder_content(__directory):
-    print("Searching for images...")
+    logger.info("Searching for images...")
     __file_names = get_files_in_folder(__directory)
     for file_name in __file_names:
-        print("   " + file_name + " found")
+        logger.info("   " + file_name + " found")
 
-    print('\n   ' + str(len(__file_names)) + " files found.\n")
+    logger.info('\n   ' + str(len(__file_names)) + " files found.\n")
 
     return __file_names
 
 
 def elaborate_directory(__set_directory):
-    print("\nWorking in directory " + __set_directory + "...\n")
+    logger.info("\nWorking in directory " + __set_directory + "...\n")
     errors_list = []
 
     file_names = analyze_folder_content(__set_directory)
@@ -228,10 +241,15 @@ def elaborate_directory(__set_directory):
 
     content = create_page_body(image_urls)
     post_link = post(__set_directory, content)
-    print('')
-    print(post_link)
-    print('\n\n')
+    logger.info('\n' + post_link + '\n\n')
+
     return post_link
+
+
+def add_page_to_results(__set_name, __url):
+    f = open(RESULTS_FILE_NAME, "a")
+    f.write(__set_name + ' : ' + __url + '\n')
+    f.close()
 
 
 # ======================================================================
@@ -246,15 +264,16 @@ print_header(read_args)
 
 
 telegraph = Telegraph(access_token=ACCESS_TOKEN)
-print("Currently used token: " + telegraph.get_access_token())
+#telegraph.create_account(short_name=AUTHOR_NAME, author_name=AUTHOR_NAME, author_url=CHAT_URL)
+logger.info("Currently used token: " + telegraph.get_access_token())
 
 
 dirs_list = get_sub_dirs_list(read_args.input_folder)
 
 
-
 for set_directory in dirs_list:
     url = elaborate_directory(set_directory)
+    add_page_to_results(set_directory, url)
 
 
 sys.exit()
