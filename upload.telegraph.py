@@ -83,9 +83,6 @@ def read_validate_input() -> ReadArgs:
     if not validate_pause(args.pause):
         args.pause = 2
 
-    # if not validate_title(args.title):
-    #     args.title = HEADER_NAME
-
     return args
 
 
@@ -112,12 +109,7 @@ def get_sub_dirs_list(root_folder):
 def get_files_in_folder(__working_directory):
     __files = [name for name in os.listdir(__working_directory) if os.path.isfile(os.path.join(__working_directory, name))]
 
-    #for __root1, __dirs, __files in os.walk(__working_directory):
     return list(filter(lambda f: f.endswith(EXTENSIONS), __files))
-
-
-# def validate_title(__title):
-#     return not (__title is None or __title == "")
 
 
 def validate_pause(_pause):
@@ -140,7 +132,6 @@ def parse_input():
 
     __args = ReadArgs()
 
-    # __args.title = args.title
     __args.pause = args.pause
     __args.input_folder = args.input
     __args.output_folder = args.output
@@ -264,7 +255,6 @@ print_header(read_args)
 
 
 telegraph = Telegraph(access_token=ACCESS_TOKEN)
-#telegraph.create_account(short_name=AUTHOR_NAME, author_name=AUTHOR_NAME, author_url=CHAT_URL)
 logger.info("Currently used token: " + telegraph.get_access_token())
 
 
