@@ -5,18 +5,20 @@ import sys
 import os
 import argparse
 import time
+import logging
+import logging.handlers
 
 
-ACCESS_TOKEN = "93877a969ce6fcccc32278a3eb39471a3cc3af26d0038ffd74916f312a82"
+ACCESS_TOKEN = "93877a969ce6fcccc32278a3eb39471a3cc3af26d0038ffd74916f312a81"
 CHAT_URL = "https://t.me/joinchat/AAAAAFWLulM15aRKgbsSnQ"
-AUTHOR_NAME = 'Kekal'
-RESERVED_FOLDERS = ['temp', '.idea', 'old']
+RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git']
 EXTENSIONS = (".jpg", ".jpeg", ".png")
 HEADER_NAME = "ᴡᴏʀʟᴅ ᴏғ ᴄᴏsᴘʟᴀʏ"
 WIDTH = 3000
 HEIGHT = 2000
 SIZE = 9000000
 DOMAIN = "https://telegra.ph"
+LOG_FILE_NAME = "log.txt"
 
 
 # ======================================================================
@@ -31,13 +33,27 @@ from telegraph import Telegraph, upload
 # ======================================================================
 
 class ReadArgs:
-    title = ""
     pause = 2
     input_folder = ''
     output_folder = ''
     height = -1
     width = -1
     size = -1
+
+
+def setup_logger():
+    handler_file = logging.handlers.WatchedFileHandler(os.environ.get("LOGFILE", LOG_FILE_NAME))
+    std_handler = logging.StreamHandler()
+    formatter_for_file = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
+    formatter_for_std = logging.Formatter('%(message)s')
+    handler_file.setFormatter(formatter_for_file)
+    std_handler.setFormatter(formatter_for_std)
+    root = logging.getLogger()
+    root.setLevel(os.environ.get("LOGLEVEL", "INFO"))
+    root.addHandler(handler_file)
+    root.addHandler(std_handler)
+
+    return root
 
 
 def validate_folder(__dir):
@@ -66,43 +82,34 @@ def read_validate_input() -> ReadArgs:
     if not validate_pause(args.pause):
         args.pause = 2
 
-    if not validate_title(args.title):
-        args.title = HEADER_NAME
-
     return args
 
 
 def print_header(__args):
+    print('\n========================================================================\n========================================================================\n')
     print('Starting in the directory: "' + __args.input_folder + '"')
-    print('Output directory: "' + __args.output_folder + '"')
-    print('Upload pause: ' + str(__args.pause) + ' seconds')
-    print("")
-    print("Title: " + __args.title)
+    print('Output directory:          "' + __args.output_folder + '"')
+    print('Upload pause:              ' + str(__args.pause) + ' seconds')
+
+    if __args.height is not None:
+        print('Maximum image height:      ' + str(__args.height) + ' px')
+    if __args.width is not None:
+        print('Maximum image width:       ' + str(__args.width) + ' px')
+
     print("")
 
 
 def get_sub_dirs_list(root_folder):
-    __directories = []
-    wp = os.walk(root_folder)
-    for root, dirs, files in wp:
+    dirs= [name for name in os.listdir(root_folder) if os.path.isdir(os.path.join(root_folder, name))]
 
-        for __curr_dir in dirs:
-            __all = True
-            for res in RESERVED_FOLDERS:
-                if __curr_dir != res:
-                    continue
-
-                __all = False
-                break
-
-            if __all:
-                __directories.append(__curr_dir)
-
-    return __directories
+    return list(filter(lambda d: d not in RESERVED_FOLDERS, dirs))
 
 
-def validate_title(__title):
-    return not (__title is None or __title == "")
+def get_files_in_folder(__working_directory):
+    __files = [name for name in os.listdir(__working_directory) if os.path.isfile(os.path.join(__working_directory, name))]
+
+    return list(filter(lambda f: f.endswith(EXTENSIONS), __files))
+
 
 
 def validate_pause(_pause):
@@ -111,7 +118,6 @@ def validate_pause(_pause):
 
 def parse_input():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--title', help='↑ Page title', required=True)
     parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str, required=True)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str, required=True)
@@ -121,12 +127,9 @@ def parse_input():
 
 
     # parser.print_help()
-    args = parser.parse_args(['-t','Vandych_Lux_school', '-i', 'H:\\tempupload.telegraph','-o' ,'H:\\tempupload.telegraph\old', '-p', '-2'])
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
     __args = ReadArgs()
-
-    __args.title = args.title
     __args.pause = args.pause
     __args.input_folder = args.input
     __args.output_folder = args.output
@@ -137,27 +140,53 @@ def parse_input():
     return __args
 
 
-def get_files_in_folder(__working_directory):
-    for __root1, __dirs, __files in os.walk(__working_directory):
-        __files = list(filter(lambda f: f.endswith(EXTENSIONS), __files))
-        return __files
-
-
-def upload_images(__file_paths, __directory, __pause):
+def upload_images(__file_names, __directory, __pause, __errors):
     image_paths = []
-    for file_path in __file_paths:
-        print("Uploading: " + __directory + '\\' + file_path)
-        image_path = upload.upload_file(__directory + '\\' + file_path)
+    for __file_name in __file_names:
+        full_path = __directory + '\\' + __file_name
+        print("\nUploading: " + full_path)
+        try:
+            image_path = upload.upload_file(full_path)
+        except BaseException as e:
+            print("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(e))
+            __errors.append(str(__file_name) + ' : ' + str(e))
+            continue
+
         print("Uploaded:  " + DOMAIN + image_path[0])
+
+        move_image_to_output_folder(full_path, __directory, __file_name)
+
         image_paths.append(image_path[0])
         time.sleep(__pause)
 
+    remove_uploaded_folder(__directory)
+
     return image_paths
+
+
+def remove_uploaded_folder(__directory):
+    try:
+        if not os.listdir(__directory):
+            os.rmdir(__directory)
+    except BaseException as e:
+        print("     " + str(e))
+
+
+def move_image_to_output_folder(__old_path, __set_name, __file_name):
+    try:
+        old_folder = read_args.output_folder + '\\' + __set_name
+        if not os.path.exists(old_folder):
+            os.makedirs(old_folder)
+
+        os.replace(__old_path, old_folder + '\\' + __file_name)
+    except BaseException as e:
+        print("     " + str(e))
 
 
 def create_page_body(__image_urls):
     body = '<p><a href="' + CHAT_URL + '" target="_blank">'+ HEADER_NAME +'</a></p>'
     for __url in __image_urls:
+        body += "<br/>"
         body += " <img src='{}'/>".format(__url)
 
     return body
@@ -169,52 +198,65 @@ def post(__title, __body):
     return '{}/{}'.format(DOMAIN, response['path'])
 
 
+def print_errors(__errors):
+    if len(__errors) > 0:
+        print("\nErrors list:")
+        for err in __errors:
+            print("   " + err)
+
+
+def analyze_folder_content(__directory):
+    print("Searching for images...")
+    __file_names = get_files_in_folder(__directory)
+    for file_name in __file_names:
+        print("   " + file_name + " found")
+
+    print('\n   ' + str(len(__file_names)) + " files found.\n")
+
+    return __file_names
+
+
+def elaborate_directory(__set_directory):
+    print("\nWorking in directory " + __set_directory + "...\n")
+    errors_list = []
+
+    file_names = analyze_folder_content(__set_directory)
+
+    image_urls = upload_images(file_names, __set_directory, read_args.pause, errors_list)
+
+    print_errors(errors_list)
+
+    content = create_page_body(image_urls)
+    post_link = post(__set_directory, content)
+    print('')
+    print(post_link)
+    print('\n\n')
+    return post_link
+
+
 # ======================================================================
+# ========================= Main routine ===============================
 # ======================================================================
 
-
-
-print('')
-print('Starting')
-print('')
-
+logger = setup_logger()
 
 read_args = read_validate_input()
 
 print_header(read_args)
 
-print("Searching for images...")
 
 telegraph = Telegraph(access_token=ACCESS_TOKEN)
-telegraph.create_account(short_name=AUTHOR_NAME, author_name=AUTHOR_NAME, author_url=CHAT_URL)
-print(telegraph.get_access_token())
+print("Currently used token: " + telegraph.get_access_token())
 
 
 dirs_list = get_sub_dirs_list(read_args.input_folder)
 
-for dir1 in dirs_list:
-    print(dir1)
-    file_names = get_files_in_folder(dir1)
-
-    print(file_names)
-
-    continue
-    #
-    # for file_name in file_names:
-    #     print("   " + file_name + " found")
-    #
-    # print("")
-    #
-    # image_urls = upload_images(file_names, wd, sleep)
-    #
-    # content = create_page_body(image_urls)
-    #
-    # post_link = post(title_str, content)
-    #
-    # print('')
-    # print(post_link)
 
 
+for set_directory in dirs_list:
+    url = elaborate_directory(set_directory)
 
+
+sys.exit()
 
 
