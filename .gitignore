@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 Title*/
 .idea/
+results.txt
+log.txt
