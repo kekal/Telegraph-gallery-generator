@@ -124,7 +124,7 @@ def parse_input():
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str, required=True)
     parser.add_argument('-he', '--height', help='↑ Maximum image height', type=int)
     parser.add_argument('-wi', '--width', help='↑ Maximum image width', type=int)
-    parser.add_argument('-s', '--size', help='↑ Maximum image file size', type=int)
+    parser.add_argument('-s', '--size', help='← Maximum image file size', type=int)
 
 
     # parser.print_help()
