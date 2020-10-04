@@ -9,9 +9,9 @@ import logging
 import logging.handlers
 
 
-ACCESS_TOKEN = "93877a969ce6fcccc32278a3eb39471a3cc3af26d0038ffd74916f312a81"
+ACCESS_TOKEN = ""
 CHAT_URL = "https://t.me/joinchat/AAAAAFWLulM15aRKgbsSnQ"
-RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git']
+RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
 EXTENSIONS = (".jpg", ".jpeg", ".png")
 HEADER_NAME = "ᴡᴏʀʟᴅ ᴏғ ᴄᴏsᴘʟᴀʏ"
 WIDTH = 3000
@@ -20,7 +20,6 @@ SIZE = 9000000
 DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
 RESULTS_FILE_NAME = "results.txt"
-
 
 # ======================================================================
 # ======================================================================
@@ -34,6 +33,7 @@ from telegraph import Telegraph, upload
 # ======================================================================
 
 class ReadArgs:
+    token = ''
     pause = 2
     input_folder = ''
     output_folder = ''
@@ -56,6 +56,11 @@ def setup_logger():
 
     return root
 
+def create_or_attach_to_telegraph_account():
+    if should_create_account:
+        return Telegraph()
+    else:
+        return Telegraph(access_token=read_args.token)
 
 def validate_folder(__dir):
     if __dir is None or __dir == "":
@@ -72,13 +77,20 @@ def validate_folder(__dir):
 
 
 def read_validate_input() -> ReadArgs:
+    global should_create_account
     args = parse_input()
 
     if not validate_folder(args.input_folder):
         args.input_folder = '.\\'
+        args.output_folder = args.input_folder + '.\\old\\'
+    else:
+        if not validate_folder(args.output_folder):
+            args.output_folder = args.input_folder + '\\old\\'
 
-    if not validate_folder(args.output_folder):
-        args.output_folder = '.\\old\\'
+    if args.token is None or args.token == "":
+        args.token = ACCESS_TOKEN
+        if args.token is None or args.token == "":
+            should_create_account = True
 
     if not validate_pause(args.pause):
         args.pause = 2
@@ -118,10 +130,10 @@ def validate_pause(_pause):
 
 def parse_input():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('-t', '--title', help='↑ Page title', required=True)
     parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
+    parser.add_argument('-t', '--token', help='↑ Account token', type=str)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str, required=True)
-    parser.add_argument('-o', '--output', help='↑ Output folder', type=str, required=True)
+    parser.add_argument('-o', '--output', help='↑ Output folder', type=str)
     parser.add_argument('-he', '--height', help='↑ Maximum image height', type=int)
     parser.add_argument('-wi', '--width', help='↑ Maximum image width', type=int)
     parser.add_argument('-s', '--size', help='← Maximum image file size', type=int)
@@ -132,6 +144,7 @@ def parse_input():
 
     __args = ReadArgs()
 
+    __args.token = args.token
     __args.pause = args.pause
     __args.input_folder = args.input
     __args.output_folder = args.output
@@ -190,7 +203,6 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
 def create_page_body(__image_urls):
     body = '<p><a href="' + CHAT_URL + '" target="_blank">'+ HEADER_NAME +'</a></p>'
     for __url in __image_urls:
-        body += "<br/>"
         body += " <img src='{}'/>".format(__url)
 
     return body
@@ -247,24 +259,32 @@ def add_page_to_results(__set_name, __url):
 # ========================= Main routine ===============================
 # ======================================================================
 
+should_create_account = False
+
 logger = setup_logger()
 
-read_args = read_validate_input()
 
-print_header(read_args)
+try:
+    read_args = read_validate_input()
 
+    print_header(read_args)
 
-telegraph = Telegraph(access_token=ACCESS_TOKEN)
-logger.info("Currently used token: " + telegraph.get_access_token())
+    telegraph = create_or_attach_to_telegraph_account()
 
+    logger.info("Currently used token: " + telegraph.get_access_token())
 
-dirs_list = get_sub_dirs_list(read_args.input_folder)
+    dirs_list = get_sub_dirs_list(read_args.input_folder)
 
+    for set_directory in dirs_list:
+        try:
+            url = elaborate_directory(set_directory)
+            add_page_to_results(set_directory, url)
 
-for set_directory in dirs_list:
-    url = elaborate_directory(set_directory)
-    add_page_to_results(set_directory, url)
+        except BaseException as e:
+            logger.fatal(set_directory + ' could not be uploaded.\nError: ' + str(e))
 
+except BaseException as e:
+    logger.fatal("Critical error: " + str(e))
 
 sys.exit()
 
