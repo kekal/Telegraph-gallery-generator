@@ -58,9 +58,13 @@ def setup_logger():
 
 def create_or_attach_to_telegraph_account():
     if should_create_account:
-        return Telegraph()
+        __telegraph = Telegraph()
+        __telegraph.create_account("Anonymous")
     else:
-        return Telegraph(access_token=read_args.token)
+        __telegraph = Telegraph(access_token=read_args.token)
+
+    logger.info("Currently used token: " + str(__telegraph.get_access_token()))
+    return __telegraph
 
 def validate_folder(__dir):
     if __dir is None or __dir == "":
@@ -100,7 +104,7 @@ def read_validate_input() -> ReadArgs:
 
 def print_header(__args):
     logger.info('\n========================================================================\n========================================================================\n')
-    logger.info('Starting in the directory: "' + __args.input_folder + '"')
+    logger.info('Starting in the directory: "' + os.getcwd() + '"')
     logger.info('Output directory:          "' + __args.output_folder + '"')
     logger.info('Upload pause:              ' + str(__args.pause) + ' seconds')
 
@@ -162,9 +166,9 @@ def upload_images(__file_names, __directory, __pause, __errors):
         logger.info("\nUploading: " + full_path)
         try:
             image_path = upload.upload_file(full_path)
-        except BaseException as e:
-            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(e))
-            __errors.append(str(__file_name) + ' : ' + str(e))
+        except BaseException as __e:
+            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e))
+            __errors.append(str(__file_name) + ' : ' + str(__e))
             continue
 
         logger.info("Uploaded:  " + DOMAIN + image_path[0])
@@ -183,8 +187,8 @@ def remove_uploaded_folder(__directory):
     try:
         if not os.listdir(__directory):
             os.rmdir(__directory)
-    except BaseException as e:
-        logger.error("     " + str(e))
+    except BaseException as __e:
+        logger.error("     " + str(__e))
 
 
 def move_image_to_output_folder(__old_path, __set_name, __file_name):
@@ -196,8 +200,8 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
         os.replace(__old_path, old_folder + '\\' + __file_name)
         logger.info(__file_name + ' was moved to the ' + old_folder)
 
-    except BaseException as e:
-        logger.error("     " + str(e))
+    except BaseException as __e:
+        logger.error("     " + str(__e))
 
 
 def create_page_body(__image_urls):
@@ -267,11 +271,11 @@ logger = setup_logger()
 try:
     read_args = read_validate_input()
 
+    os.chdir(read_args.input_folder)
+
     print_header(read_args)
 
     telegraph = create_or_attach_to_telegraph_account()
-
-    logger.info("Currently used token: " + telegraph.get_access_token())
 
     dirs_list = get_sub_dirs_list(read_args.input_folder)
 
