@@ -11,10 +11,10 @@ import logging.handlers
 
 
 ACCESS_TOKEN = ""
-CHAT_URL = "https://t.me/joinchat/AAAAAFWLulM15aRKgbsSnQ"
+CHAT_URL = "https://my_page"
 RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
 EXTENSIONS = (".jpg", ".jpeg", ".png")
-HEADER_NAME = "ᴡᴏʀʟᴅ ᴏғ ᴄᴏsᴘʟᴀʏ"
+HEADER_NAME = "My albums page"
 WIDTH = 3000
 HEIGHT = 2000
 SIZE = 9000000
