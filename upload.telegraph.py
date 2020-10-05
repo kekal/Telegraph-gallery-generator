@@ -2,6 +2,7 @@
 # coding=utf-8
 import subprocess
 import sys
+import traceback
 import os
 import argparse
 import time
@@ -167,7 +168,7 @@ def upload_images(__file_names, __directory, __pause, __errors):
         try:
             image_path = upload.upload_file(full_path)
         except BaseException as __e:
-            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e))
+            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n' + str(traceback.format_exc()))
             __errors.append(str(__file_name) + ' : ' + str(__e))
             continue
 
@@ -188,7 +189,7 @@ def remove_uploaded_folder(__directory):
         if not os.listdir(__directory):
             os.rmdir(__directory)
     except BaseException as __e:
-        logger.error("     " + str(__e))
+        logger.error("     " + str(__e) + '\n' + str(traceback.format_exc()))
 
 
 def move_image_to_output_folder(__old_path, __set_name, __file_name):
@@ -201,7 +202,7 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
         logger.info(__file_name + ' was moved to the ' + old_folder)
 
     except BaseException as __e:
-        logger.error("     " + str(__e))
+        logger.error("     " + str(__e) + '\n' + str(traceback.format_exc()))
 
 
 def create_page_body(__image_urls):
@@ -250,12 +251,12 @@ def elaborate_directory(__set_directory):
     post_link = post(__set_directory, content)
     logger.info('\n' + post_link + '\n\n')
 
-    return post_link
+    return post_link, len(image_urls)
 
 
-def add_page_to_results(__set_name, __url):
+def add_page_to_results(__set_name, __url, __count):
     f = open(RESULTS_FILE_NAME, "a")
-    f.write(__set_name + ' : ' + __url + '\n')
+    f.write(__set_name + ' : ' + str(__count) + ' : ' + __url + '\n')
     f.close()
 
 
@@ -281,14 +282,14 @@ try:
 
     for set_directory in dirs_list:
         try:
-            url = elaborate_directory(set_directory)
-            add_page_to_results(set_directory, url)
+            url, __count = elaborate_directory(set_directory)
+            add_page_to_results(set_directory, url, __count)
 
         except BaseException as e:
-            logger.fatal(set_directory + ' could not be uploaded.\nError: ' + str(e))
+            logger.fatal(set_directory + ' could not be uploaded.\nError: ' + str(e) + '\n' + str(traceback.format_exc()))
 
 except BaseException as e:
-    logger.fatal("Critical error: " + str(e))
+    logger.fatal("Critical error: " + str(e) + '\n' + str(traceback.format_exc()))
 
 sys.exit()
 
