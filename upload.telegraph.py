@@ -13,7 +13,7 @@ import logging.handlers
 ACCESS_TOKEN = ""
 CHAT_URL = "https://my_page"
 RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
-EXTENSIONS = (".jpg", ".jpeg", ".png")
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif")
 HEADER_NAME = "My albums page"
 WIDTH = 3000
 HEIGHT = 2000
@@ -126,7 +126,7 @@ def get_sub_dirs_list(root_folder):
 def get_files_in_folder(__working_directory):
     __files = [name for name in os.listdir(__working_directory) if os.path.isfile(os.path.join(__working_directory, name))]
 
-    return list(filter(lambda f: f.endswith(EXTENSIONS), __files))
+    return list(filter(lambda f: f.lower().endswith(EXTENSIONS), __files))
 
 
 def validate_pause(_pause):
