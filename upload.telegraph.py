@@ -168,7 +168,8 @@ def upload_images(__file_names, __directory, __pause, __errors):
         try:
             image_path = upload.upload_file(full_path)
         except BaseException as __e:
-            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n' + str(traceback.format_exc()))
+            body = getattr(__e, 'doc', '')
+            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n     Error body:\n' + str(body) + '\n' + str(traceback.format_exc()))
             __errors.append(str(__file_name) + ' : ' + str(__e))
             continue
 
