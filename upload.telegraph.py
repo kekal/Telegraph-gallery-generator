@@ -25,9 +25,11 @@ RESULTS_FILE_NAME = "results.txt"
 # ======================================================================
 # ======================================================================
 
-subprocess.check_call([sys.executable, "-m", "pip", "install", "telegraph"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph==1.4.1"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow==8.0.1"])
 
 from telegraph import Telegraph, upload
+from PIL import Image
 
 
 # ======================================================================
@@ -163,10 +165,15 @@ def parse_input():
 def upload_images(__file_names, __directory, __pause, __errors):
     image_paths = []
     for __file_name in __file_names:
-        full_path = __directory + '\\' + __file_name
-        logger.info("\nUploading: " + full_path)
+        __upload_path =  __full_path = __directory + '\\' + __file_name
+
+        logger.info("\nUploading: " + __full_path)
+
+        if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
+            __upload_path = run_image_downgrade(__full_path)
+
         try:
-            image_path = upload.upload_file(full_path)
+            image_path = upload.upload_file(__upload_path)
         except BaseException as __e:
             body = getattr(__e, 'doc', '')
             logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n     Error body:\n' + str(body) + '\n' + str(traceback.format_exc()))
@@ -175,7 +182,7 @@ def upload_images(__file_names, __directory, __pause, __errors):
 
         logger.info("Uploaded:  " + DOMAIN + image_path[0])
 
-        move_image_to_output_folder(full_path, __directory, __file_name)
+        move_image_to_output_folder(__full_path, __directory, __file_name)
 
         image_paths.append(image_path[0])
         time.sleep(__pause)
@@ -183,6 +190,66 @@ def upload_images(__file_names, __directory, __pause, __errors):
     remove_uploaded_folder(__directory)
 
     return image_paths
+
+
+def validate_image_dimensions(__full_path):
+    __im = Image.open(__full_path)
+    __width, __height = __im.size
+
+    return __width <= WIDTH and __height <= HEIGHT
+
+
+def validate_file_size(full_path):
+    __file_size = os.stat(full_path).st_size
+    return True if __file_size < SIZE else False
+
+
+def run_image_downgrade(__full_path):
+    __need_downscale = not validate_image_dimensions(__full_path)
+    __need_downsize = not validate_file_size(__full_path)
+
+    __trimmed_path = str(os.path.splitext(__full_path)[0])
+    __im = Image.open(__full_path)
+
+    if __need_downscale:
+        __width, __height = __im.size
+        __w_percent = (WIDTH / float(__width))
+        __h_percent = (HEIGHT / float(__height))
+        __percent = min(__w_percent, __h_percent)
+        __new_width = int(float(__width) * (float(__percent)))
+        __new_height = int(float(__height) * (float(__percent)))
+
+        __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
+
+    if __need_downsize:
+        __compressed_path = compress_image(__trimmed_path, __im)
+        return __compressed_path
+
+    else:
+        __im.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=100)
+        return __trimmed_path + "_c.jpg"
+
+
+def compress_image(__trimmed_path, img):
+    __quality = 100
+    try:
+        os.remove(__trimmed_path + "_c.jpg")
+    except IOError as __e:
+        pass
+
+    __current_size = SIZE + 1
+    while __current_size > SIZE:
+        if __quality == 0:
+            os.remove(__trimmed_path + "_c.jpg")
+            logger.error("Error: File cannot be compressed below " + str(SIZE))
+            break
+
+        img.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=__quality)
+
+        __current_size = os.stat(__trimmed_path + "_c.jpg").st_size
+        __quality -= 1
+
+    return __trimmed_path + "_c.jpg"
 
 
 def remove_uploaded_folder(__directory):
