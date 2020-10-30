@@ -84,7 +84,7 @@ def validate_folder(__dir):
 
 
 def read_validate_input() -> ReadArgs:
-    global should_create_account
+
     args = parse_input()
 
     if not validate_folder(args.input_folder):
@@ -97,10 +97,23 @@ def read_validate_input() -> ReadArgs:
     if args.token is None or args.token == "":
         args.token = ACCESS_TOKEN
         if args.token is None or args.token == "":
+            global should_create_account
             should_create_account = True
 
-    if not validate_pause(args.pause):
+    if not validate_natural(args.pause):
         args.pause = 2
+
+    if validate_natural(args.width):
+        global WIDTH
+        WIDTH = args.width
+
+    if validate_natural(args.height):
+        global HEIGHT
+        HEIGHT = args.height
+
+    if validate_natural(args.size):
+        global SIZE
+        SIZE = args.size
 
     return args
 
@@ -131,8 +144,8 @@ def get_files_in_folder(__working_directory):
     return list(filter(lambda f: f.lower().endswith(EXTENSIONS), __files))
 
 
-def validate_pause(_pause):
-    return not (_pause is None or _pause < 0)
+def validate_natural(_natural):
+    return _natural is not None and _natural > 0
 
 
 def parse_input():
@@ -184,6 +197,12 @@ def upload_images(__file_names, __directory, __pause, __errors):
 
         move_image_to_output_folder(__full_path, __directory, __file_name)
 
+        try:
+            os.remove(__upload_path)
+            logger.info("Temporary file " + str(__upload_path) + " removed.")
+        except IOError as __e:
+            pass
+
         image_paths.append(image_path[0])
         time.sleep(__pause)
 
@@ -213,6 +232,7 @@ def run_image_downgrade(__full_path):
 
     if __need_downscale:
         __width, __height = __im.size
+        logger.info("Image resolution exceeds the specified boundaries of " + str(WIDTH) +" x "+ str(HEIGHT) + " pixels")
         __w_percent = (WIDTH / float(__width))
         __h_percent = (HEIGHT / float(__height))
         __percent = min(__w_percent, __h_percent)
@@ -220,13 +240,16 @@ def run_image_downgrade(__full_path):
         __new_height = int(float(__height) * (float(__percent)))
 
         __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
+        logger.info("The image resolution changed to " + str(__new_width) + " x " + str(__new_height))
 
     if __need_downsize:
+        logger.info("The image file size exceeds the specified maximum value of " + str(SIZE))
         __compressed_path = compress_image(__trimmed_path, __im)
         return __compressed_path
 
     else:
         __im.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=100)
+        logger.info("Temporary file saved to: " + str(__trimmed_path + "_c.jpg"))
         return __trimmed_path + "_c.jpg"
 
 
@@ -239,15 +262,24 @@ def compress_image(__trimmed_path, img):
 
     __current_size = SIZE + 1
     while __current_size > SIZE:
+        logger.info("     Image size: " + str(__current_size))
         if __quality == 0:
             os.remove(__trimmed_path + "_c.jpg")
             logger.error("Error: File cannot be compressed below " + str(SIZE))
             break
 
+        logger.info("     Trying compression ratio " + str(__quality))
+
         img.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=__quality)
 
         __current_size = os.stat(__trimmed_path + "_c.jpg").st_size
         __quality -= 1
+
+    logger.info("\n")
+    logger.info("The resulting image size is " + str(__current_size))
+    logger.info("Compression ratio: " + str(__quality))
+    logger.info("Temporary file saved to: " + str(__trimmed_path + "_c.jpg"))
+    logger.info("\n")
 
     return __trimmed_path + "_c.jpg"
 

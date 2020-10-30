@@ -10,6 +10,9 @@ Simple script for creating album as a telegra.ph page.
 | -o, --output | Output folder | Folder to keep uploaded albums. _optional_ |
 | -t, --token | Account token | Account token to keep the ability to edit page in the future<br/>(if empty — will be generated).<br/>Can also be specified inside the script. _optional_ |
 | -p, --pause | Upload pause in seconds | Pause between image upload operations. _optional_ | 
+| -wi, --width | Maximum image width | Images that exceed the maximum width will be downscaled. (default value 5000). _optional_ | 
+| -he, --height | Maximum image height | Images that exceed the maximum height will be reduced. (default value 5000). _optional_ | 
+| -s, --size | Maximum image file size | Images larger than the maximum size will be compressed. Specified in bytes. (default value 5000000). _optional_ | 
 
 
 ## Example
