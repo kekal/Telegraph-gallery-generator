@@ -17,6 +17,8 @@ EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif")
 HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
+SQUARE = 24000000
+USE_SQUARE = False
 SIZE = 5000000
 DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
@@ -42,6 +44,7 @@ class ReadArgs:
     output_folder = ''
     height = -1
     width = -1
+    square = -1
     size = -1
 
 
@@ -115,19 +118,33 @@ def read_validate_input() -> ReadArgs:
         global SIZE
         SIZE = args.size
 
+    if validate_natural(args.square):
+        global SQUARE
+        global USE_SQUARE
+        SQUARE = args.square
+        USE_SQUARE = True
+
     return args
 
 
 def print_header(__args):
-    logger.info('\n========================================================================\n========================================================================\n')
+    logger.info('\n')
+    logger.info('========================================================================')
+    logger.info('========================================================================')
+    logger.info('\n')
     logger.info('Starting in the directory: "' + os.getcwd() + '"')
     logger.info('Output directory:          "' + __args.output_folder + '"')
     logger.info('Upload pause:              ' + str(__args.pause) + ' seconds')
 
-    if __args.height is not None:
-        logger.info('Maximum image height:      ' + str(__args.height) + ' px')
-    if __args.width is not None:
-        logger.info('Maximum image width:       ' + str(__args.width) + ' px')
+    if USE_SQUARE:
+        if __args.square is not None:
+            logger.info('Maximum image resolution:      ' + str(__args.square) + ' px')
+
+    else:
+        if __args.height is not None:
+            logger.info('Maximum image height:      ' + str(__args.height) + ' px')
+        if __args.width is not None:
+            logger.info('Maximum image width:       ' + str(__args.width) + ' px')
 
     logger.info("")
 
@@ -150,17 +167,23 @@ def validate_natural(_natural):
 
 def parse_input():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
-    parser.add_argument('-t', '--token', help='↑ Account token', type=str)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str, required=True)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str)
+    parser.add_argument('-t', '--token', help='↑ Account token', type=str)
+    parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
     parser.add_argument('-he', '--height', help='↑ Maximum image height', type=int)
     parser.add_argument('-wi', '--width', help='↑ Maximum image width', type=int)
+    parser.add_argument('-sq', '--square', help='↑ Full image resolution in pixels', type=int)
     parser.add_argument('-s', '--size', help='← Maximum image file size', type=int)
 
+    parser.error = parse_error
 
-    # parser.print_help()
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except TypeError:
+        parser.print_help()
+        sys.exit(2)
+        pass
 
     __args = ReadArgs()
 
@@ -170,9 +193,16 @@ def parse_input():
     __args.output_folder = args.output
     __args.height = args.height
     __args.width = args.width
+    __args.square = args.square
     __args.size = args.size
 
     return __args
+
+
+def parse_error(message):
+    logger.fatal("Arguments are invalid:")
+    logger.fatal("     " + str(message))
+    logger.fatal("\n")
 
 
 def upload_images(__file_names, __directory, __pause, __errors):
@@ -214,8 +244,11 @@ def upload_images(__file_names, __directory, __pause, __errors):
 def validate_image_dimensions(__full_path):
     __im = Image.open(__full_path)
     __width, __height = __im.size
+    if USE_SQUARE:
+        return __width * __height < SQUARE
 
-    return __width <= WIDTH and __height <= HEIGHT
+    else:
+        return __width <= WIDTH and __height <= HEIGHT
 
 
 def validate_file_size(full_path):
@@ -231,26 +264,44 @@ def run_image_downgrade(__full_path):
     __im = Image.open(__full_path)
 
     if __need_downscale:
-        __width, __height = __im.size
-        logger.info("Image resolution exceeds the specified boundaries of " + str(WIDTH) +" x "+ str(HEIGHT) + " pixels")
-        __w_percent = (WIDTH / float(__width))
-        __h_percent = (HEIGHT / float(__height))
-        __percent = min(__w_percent, __h_percent)
-        __new_width = int(float(__width) * (float(__percent)))
-        __new_height = int(float(__height) * (float(__percent)))
-
-        __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
-        logger.info("The image resolution changed to " + str(__new_width) + " x " + str(__new_height))
+        __im = downscale(__im)
 
     if __need_downsize:
-        logger.info("The image file size exceeds the specified maximum value of " + str(SIZE))
-        __compressed_path = compress_image(__trimmed_path, __im)
-        return __compressed_path
+        return down_size(__im, __trimmed_path)
 
     else:
         __im.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=100)
         logger.info("Temporary file saved to: " + str(__trimmed_path + "_c.jpg"))
         return __trimmed_path + "_c.jpg"
+
+
+def down_size(__im, __trimmed_path):
+    logger.info("The image file size exceeds the specified maximum value of " + str(SIZE))
+    __compressed_path = compress_image(__trimmed_path, __im)
+    return __compressed_path
+
+
+def downscale(__im):
+    __width, __height = __im.size
+
+    if USE_SQUARE:
+        logger.info("Image resolution exceeds the specified boundary: "
+                    + str(SQUARE) + " pixels (" + str(__width * __height) + ")")
+        __percent = SQUARE / (__width * __height)
+    else:
+        logger.info("Image dimensions exceed the specified boundaries of " + str(WIDTH)
+                    + " x " + str(HEIGHT) + " pixels (" + str(__width) + " x " + str(__height) + ")")
+        __w_percent = (WIDTH / float(__width))
+        __h_percent = (HEIGHT / float(__height))
+        __percent = min(__w_percent, __h_percent)
+
+    __new_width = int(float(__width) * (float(__percent)))
+    __new_height = int(float(__height) * (float(__percent)))
+
+    __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
+
+    logger.info("The image resolution changed to " + str(__new_width) + " x " + str(__new_height))
+    return __im
 
 
 def compress_image(__trimmed_path, img):
@@ -354,9 +405,9 @@ def elaborate_directory(__set_directory):
     return post_link, len(image_urls)
 
 
-def add_page_to_results(__set_name, __url, __count):
+def add_page_to_results(__set_name, __url, _count):
     f = open(RESULTS_FILE_NAME, "a")
-    f.write(__set_name + ' : ' + str(__count) + ' : ' + __url + '\n')
+    f.write(__set_name + ' : ' + str(_count) + ' : ' + __url + '\n')
     f.close()
 
 
