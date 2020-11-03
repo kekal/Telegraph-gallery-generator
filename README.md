@@ -12,6 +12,7 @@ Simple script for creating album as a telegra.ph page.
 | -p, --pause | Upload pause in seconds | Pause between image upload operations. _optional_ | 
 | -wi, --width | Maximum image width | Images that exceed the maximum width will be downscaled. (default value 5000). _optional_ | 
 | -he, --height | Maximum image height | Images that exceed the maximum height will be reduced. (default value 5000). _optional_ | 
+| -sq, --square | Maximum image resolution in pixels | Images that exceed the maximum resolution will be reduced. (default value 24000000). _optional_ | 
 | -s, --size | Maximum image file size | Images larger than the maximum size will be compressed. Specified in bytes. (default value 5000000). _optional_ | 
 
 
