@@ -131,3 +131,5 @@ Title*/
 .idea/
 results.txt
 log.txt
+*.jpg
+*.jpeg
