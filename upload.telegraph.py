@@ -18,7 +18,7 @@ HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
 SQUARE = 24000000
-USE_SQUARE = False
+USE_SQUARE = True
 SIZE = 5000000
 DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
@@ -87,7 +87,7 @@ def validate_folder(__dir):
 
 
 def read_validate_input() -> ReadArgs:
-
+    global USE_SQUARE
     args = parse_input()
 
     if not validate_folder(args.input_folder):
@@ -113,14 +113,15 @@ def read_validate_input() -> ReadArgs:
     if validate_natural(args.height):
         global HEIGHT
         HEIGHT = args.height
+        USE_SQUARE = False
 
     if validate_natural(args.size):
         global SIZE
         SIZE = args.size
+        USE_SQUARE = False
 
     if validate_natural(args.square):
         global SQUARE
-        global USE_SQUARE
         SQUARE = args.square
         USE_SQUARE = True
 
