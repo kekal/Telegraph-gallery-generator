@@ -257,8 +257,13 @@ def validate_file_size(full_path):
 
 
 def run_image_downgrade(__full_path):
-    __need_downscale = not validate_image_dimensions(__full_path)
-    __need_downsize = not validate_file_size(__full_path)
+    __need_downscale = False
+
+    if not validate_image_dimensions(__full_path):
+        __need_downscale = True
+        __need_downsize = True
+    else:
+        __need_downsize = not validate_file_size(__full_path)
 
     __trimmed_path = str(os.path.splitext(__full_path)[0])
     __im = Image.open(__full_path)
