@@ -8,7 +8,7 @@ import argparse
 import time
 import logging
 import logging.handlers
-
+import math
 
 ACCESS_TOKEN = ""
 CHAT_URL = "https://my_page"
@@ -293,16 +293,12 @@ def downscale(__im):
     if USE_SQUARE:
         logger.info("Image resolution exceeds the specified boundary: "
                     + str(SQUARE) + " pixels (" + str(__width * __height) + ")")
-        __percent = SQUARE / (__width * __height)
     else:
         logger.info("Image dimensions exceed the specified boundaries of " + str(WIDTH)
                     + " x " + str(HEIGHT) + " pixels (" + str(__width) + " x " + str(__height) + ")")
-        __w_percent = (WIDTH / float(__width))
-        __h_percent = (HEIGHT / float(__height))
-        __percent = min(__w_percent, __h_percent)
 
-    __new_width = int(float(__width) * (float(__percent)))
-    __new_height = int(float(__height) * (float(__percent)))
+    __new_width = int(math.sqrt(__width * SQUARE / float(__height)))
+    __new_height = int(math.sqrt(__height * SQUARE / float(__width)))
 
     __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
 
