@@ -273,7 +273,7 @@ def run_image_downgrade(__full_path):
         __im = downscale(__im)
 
     if __need_downsize:
-        return down_size(__im, __trimmed_path)
+        return down_size(__im, __trimmed_path, os.stat(__full_path).st_size)
 
     else:
         __im.save(__trimmed_path + "_c.jpg", "JPEG", optimize=True, quality=100)
@@ -281,9 +281,9 @@ def run_image_downgrade(__full_path):
         return __trimmed_path + "_c.jpg"
 
 
-def down_size(__im, __trimmed_path):
-    logger.info("The image file size exceeds the specified maximum value of " + str(SIZE))
-    __compressed_path = compress_image(__trimmed_path, __im)
+def down_size(__im, __trimmed_path, desired_size):
+    logger.info("The image file size exceeds the desired value of " + str(desired_size))
+    __compressed_path = compress_image(__trimmed_path, __im, desired_size)
     return __compressed_path
 
 
@@ -306,15 +306,15 @@ def downscale(__im):
     return __im
 
 
-def compress_image(__trimmed_path, img):
+def compress_image(__trimmed_path, img, former_size):
     __quality = 100
     try:
         os.remove(__trimmed_path + "_c.jpg")
     except IOError as __e:
         pass
 
-    __current_size = SIZE + 1
-    while __current_size > SIZE:
+    __current_size = (former_size if former_size < SIZE else SIZE) + 1
+    while __current_size > former_size:
         logger.info("     Image size: " + str(__current_size))
         if __quality == 0:
             os.remove(__trimmed_path + "_c.jpg")
