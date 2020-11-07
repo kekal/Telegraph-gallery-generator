@@ -313,8 +313,9 @@ def compress_image(__trimmed_path, img, former_size):
     except IOError as __e:
         pass
 
-    __current_size = (former_size if former_size < SIZE else SIZE) + 1
-    while __current_size > former_size:
+    __current_size = needed_size = former_size if former_size < SIZE else SIZE
+
+    while __current_size + 1 > needed_size:
         logger.info("     Image size: " + str(__current_size))
         if __quality == 0:
             os.remove(__trimmed_path + "_c.jpg")
