@@ -218,6 +218,12 @@ def upload_images(__file_names, __directory, __pause, __errors):
 
         try:
             image_path = upload.upload_file(__upload_path)
+        except upload.TelegraphException as __e:
+            body = getattr(__e, 'doc', '')
+            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(
+                __e) + '\n     Error body:\n' + str(body))
+            __errors.append(str(__file_name) + ' : ' + str(__e))
+            continue
         except BaseException as __e:
             body = getattr(__e, 'doc', '')
             logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n     Error body:\n' + str(body) + '\n' + str(traceback.format_exc()))
