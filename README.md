@@ -12,9 +12,12 @@ Simple script for creating album as a telegra.ph page.
 | -p, --pause | Upload pause in seconds | Pause between image upload operations. _optional_ | 
 | -wi, --width | Maximum image width | Images that exceed the maximum width will be downscaled. (default value 5000). _optional_ | 
 | -he, --height | Maximum image height | Images that exceed the maximum height will be reduced. (default value 5000). _optional_ | 
-| -sq, --square | Maximum image resolution in pixels | Images that exceed the maximum resolution will be reduced. (default value 24000000). _optional_ | 
 | -s, --size | Maximum image file size | Images larger than the maximum size will be compressed. Specified in bytes. (default value 5000000). _optional_ | 
 
+```
+Note
+The maximum image sizes and dimensions in telegra.ph are not disclosed, but some empirical research has revealed a simple rule: the width and height must be less than or equal to 10,000 pixels in total, and the file size must not exceed 5 MB. These restrictions are set in the script by default and can be changed using command line arguments.
+```
 
 ## Example
 

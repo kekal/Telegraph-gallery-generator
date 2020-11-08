@@ -8,7 +8,6 @@ import argparse
 import time
 import logging
 import logging.handlers
-import math
 
 ACCESS_TOKEN = ""
 CHAT_URL = "https://my_page"
@@ -17,9 +16,10 @@ EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif")
 HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
-SQUARE = 24000000
-USE_SQUARE = True
+TOTAL_DIMENSION_THRESHOLD = 10000
+DIMENSIONS_OVERWRITTEN = False
 SIZE = 5000000
+PAUSE = 2
 DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
 RESULTS_FILE_NAME = "results.txt"
@@ -33,7 +33,6 @@ subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check
 from telegraph import Telegraph, upload
 from PIL import Image
 
-
 # ======================================================================
 # ======================================================================
 
@@ -44,7 +43,6 @@ class ReadArgs:
     output_folder = ''
     height = -1
     width = -1
-    square = -1
     size = -1
 
 
@@ -87,7 +85,6 @@ def validate_folder(__dir):
 
 
 def read_validate_input() -> ReadArgs:
-    global USE_SQUARE
     args = parse_input()
 
     if not validate_folder(args.input_folder):
@@ -103,27 +100,33 @@ def read_validate_input() -> ReadArgs:
             global should_create_account
             should_create_account = True
 
-    if not validate_natural(args.pause):
-        args.pause = 2
+    if validate_natural(args.pause):
+        global PAUSE
+        PAUSE = args.pause
 
+    width_set = False
+    height_set = False
     if validate_natural(args.width):
         global WIDTH
+        width_set = True
         WIDTH = args.width
 
     if validate_natural(args.height):
         global HEIGHT
+        height_set = True
         HEIGHT = args.height
-        USE_SQUARE = False
+
+    if width_set or height_set:
+        global DIMENSIONS_OVERWRITTEN
+        DIMENSIONS_OVERWRITTEN = True
+        if WIDTH * HEIGHT >= TOTAL_DIMENSION_THRESHOLD:
+            logger.warn("======== Warning ========")
+            logger.warn("The selected dimensions are greater than 10,000 pixels in total. The server will most likely reject these options.")
+            logger.warn("")
 
     if validate_natural(args.size):
         global SIZE
         SIZE = args.size
-        USE_SQUARE = False
-
-    if validate_natural(args.square):
-        global SQUARE
-        SQUARE = args.square
-        USE_SQUARE = True
 
     return args
 
@@ -137,11 +140,7 @@ def print_header(__args):
     logger.info('Output directory:          "' + __args.output_folder + '"')
     logger.info('Upload pause:              ' + str(__args.pause) + ' seconds')
 
-    if USE_SQUARE:
-        if __args.square is not None:
-            logger.info('Maximum image resolution:      ' + str(__args.square) + ' px')
-
-    else:
+    if DIMENSIONS_OVERWRITTEN:
         if __args.height is not None:
             logger.info('Maximum image height:      ' + str(__args.height) + ' px')
         if __args.width is not None:
@@ -174,7 +173,6 @@ def parse_input():
     parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
     parser.add_argument('-he', '--height', help='↑ Maximum image height', type=int)
     parser.add_argument('-wi', '--width', help='↑ Maximum image width', type=int)
-    parser.add_argument('-sq', '--square', help='↑ Full image resolution in pixels', type=int)
     parser.add_argument('-s', '--size', help='← Maximum image file size', type=int)
 
     parser.error = parse_error
@@ -194,7 +192,6 @@ def parse_input():
     __args.output_folder = args.output
     __args.height = args.height
     __args.width = args.width
-    __args.square = args.square
     __args.size = args.size
 
     return __args
@@ -206,7 +203,7 @@ def parse_error(message):
     logger.fatal("\n")
 
 
-def upload_images(__file_names, __directory, __pause, __errors):
+def upload_images(__file_names, __directory, __errors):
     image_paths = []
     for __file_name in __file_names:
         __upload_path =  __full_path = __directory + '\\' + __file_name
@@ -241,7 +238,7 @@ def upload_images(__file_names, __directory, __pause, __errors):
             pass
 
         image_paths.append(image_path[0])
-        time.sleep(__pause)
+        time.sleep(PAUSE)
 
     remove_uploaded_folder(__directory)
 
@@ -251,11 +248,11 @@ def upload_images(__file_names, __directory, __pause, __errors):
 def validate_image_dimensions(__full_path):
     __im = Image.open(__full_path)
     __width, __height = __im.size
-    if USE_SQUARE:
-        return __width * __height < SQUARE
 
+    if DIMENSIONS_OVERWRITTEN:
+        return __width <= WIDTH and  __height <= HEIGHT
     else:
-        return __width <= WIDTH and __height <= HEIGHT
+        return __width + __height < TOTAL_DIMENSION_THRESHOLD
 
 
 def validate_file_size(full_path):
@@ -296,15 +293,25 @@ def down_size(__im, __trimmed_path, desired_size):
 def downscale(__im):
     __width, __height = __im.size
 
-    if USE_SQUARE:
-        logger.info("Image resolution exceeds the specified boundary: "
-                    + str(SQUARE) + " pixels (" + str(__width * __height) + ")")
+    if not DIMENSIONS_OVERWRITTEN:
+        logger.info("Image dimensions exceed the default limitation. (The sum of the width and height must not be greater than "
+            + str(TOTAL_DIMENSION_THRESHOLD) + " px).")
+
+        __new_width = int(__width * TOTAL_DIMENSION_THRESHOLD / float(__height + __width))
+        __new_height = int(__height * TOTAL_DIMENSION_THRESHOLD / float(__height + __width))
+
     else:
         logger.info("Image dimensions exceed the specified boundaries of " + str(WIDTH)
-                    + " x " + str(HEIGHT) + " pixels (" + str(__width) + " x " + str(__height) + ")")
+            + " x " + str(HEIGHT) + " pixels (" + str(__width) + " x " + str(__height) + ")")
 
-    __new_width = int(math.sqrt(__width * SQUARE / float(__height)))
-    __new_height = int(math.sqrt(__height * SQUARE / float(__width)))
+        _h_factor = HEIGHT / float(__height)
+        _w_factor = WIDTH  / float(__width)
+
+        _factor = min(_h_factor,_w_factor)
+
+        __new_width = int(__width * _factor)
+        __new_height = int(__height * _factor)
+
 
     __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
 
@@ -403,7 +410,7 @@ def elaborate_directory(__set_directory):
 
     file_names = analyze_folder_content(__set_directory)
 
-    image_urls = upload_images(file_names, __set_directory, read_args.pause, errors_list)
+    image_urls = upload_images(file_names, __set_directory, errors_list)
 
     print_errors(errors_list)
 
