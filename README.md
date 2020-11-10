@@ -1,6 +1,6 @@
 # telegra.ph-album-creator
 
-Simple script for creating album as a telegra.ph page.
+Simple script for creating album as a telegra.ph page based on [python273/telegraph](https://github.com/python273/telegraph/releases/tag/v1.4.1)
 
 ## Options:
 
@@ -14,10 +14,10 @@ Simple script for creating album as a telegra.ph page.
 | -he, --height | Maximum image height | Images that exceed the maximum height will be reduced. (default value 5000). _optional_ | 
 | -s, --size | Maximum image file size | Images larger than the maximum size will be compressed. Specified in bytes. (default value 5000000). _optional_ | 
 
-```
-Note
-The maximum image sizes and dimensions in telegra.ph are not disclosed, but some empirical research has revealed a simple rule: the width and height must be less than or equal to 10,000 pixels in total, and the file size must not exceed 5 MB. These restrictions are set in the script by default and can be changed using command line arguments.
-```
+
+### Note
+>The maximum image sizes and dimensions in telegra.ph are not disclosed, but some empirical research has revealed a simple rule: the width and height must be less than or equal to 10,000 pixels in total, and the file size must not exceed 5 MB. These restrictions are set in the script by default and can be changed using command line arguments.
+
 
 ## Example
 
