@@ -8,6 +8,8 @@ import argparse
 import time
 import logging
 import logging.handlers
+import urllib.request
+import re
 
 ACCESS_TOKEN = ""
 CHAT_URL = "https://my_page"
@@ -18,6 +20,7 @@ WIDTH = 5000
 HEIGHT = 5000
 TOTAL_DIMENSION_THRESHOLD = 10000
 DIMENSIONS_OVERWRITTEN = False
+PAGE_SPECIFIED = False
 SIZE = 5000000
 PAUSE = 2
 DOMAIN = "https://telegra.ph"
@@ -44,6 +47,7 @@ class ReadArgs:
     height = -1
     width = -1
     size = -1
+    page=''
 
 
 def setup_logger():
@@ -77,15 +81,18 @@ def validate_folder(__dir):
         try:
             if not os.path.exists(__dir):
                 logger.fatal('Directory "' + str(__dir) + '" does not exist or not accessible.')
-                sys.exit()
+                os._exit(1)
         except TypeError:
             logger.fatal('Directory "' + str(__dir) + '" does not exist or not accessible.')
-            sys.exit()
+            os._exit(1)
     return True
 
 
 def read_validate_input() -> ReadArgs:
     args = parse_input()
+
+    if validate_file(args.page):
+        PAGE_SPECIFIED = True
 
     if not validate_folder(args.input_folder):
         args.input_folder = '.\\'
@@ -167,7 +174,8 @@ def validate_natural(_natural):
 
 def parse_input():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', help='↑ Input folder', type=str, required=True)
+    parser.add_argument('-pa', '--page', help='↑ Upload existing html page', type=str)
+    parser.add_argument('-i', '--input', help='↑ Input folder', type=str)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str)
     parser.add_argument('-t', '--token', help='↑ Account token', type=str)
     parser.add_argument('-p', '--pause', help='↑ Upload pause in seconds', type=int)
@@ -180,8 +188,10 @@ def parse_input():
     try:
         args = parser.parse_args()
     except TypeError:
+        logger.info('')
+        logger.info('')
         parser.print_help()
-        sys.exit(2)
+        os._exit(2)
         pass
 
     __args = ReadArgs()
@@ -193,6 +203,7 @@ def parse_input():
     __args.height = args.height
     __args.width = args.width
     __args.size = args.size
+    __args.page = args.page
 
     return __args
 
@@ -243,6 +254,15 @@ def upload_images(__file_names, __directory, __errors):
     remove_uploaded_folder(__directory)
 
     return image_paths
+
+
+def validate_file(__full_path):
+    if __full_path is None or __full_path == "":
+        return False
+    else:
+        global PAGE_SPECIFIED
+        PAGE_SPECIFIED = True
+        return True
 
 
 def validate_image_dimensions(__full_path):
@@ -427,6 +447,30 @@ def add_page_to_results(__set_name, __url, _count):
     f.close()
 
 
+def recreate_page():
+    f = urllib.request.urlopen(read_args.page)
+    body = f.read().decode('utf-8')
+    title_pat = re.compile(r'<title([^<]*)')
+    title = 'Album'
+    try:
+        title = title_pat.findall(body)[0]
+        title = title.replace('Telegraph', '')
+        title = title.strip()
+        title = title.strip('>')
+        title = title.strip()
+        title = title.strip('–')
+        title = title.strip()
+
+    except IndexError:
+        logger.info('There is no title. Empty string will be used.')
+
+
+    pat = re.compile(r'<img [^>]*src="([^"]+)')
+    image_urls = pat.findall(body)
+    content = create_page_body(image_urls)
+    post_link = post(title, content)
+    logger.info('\n' + post_link + '\n\n')
+
 # ======================================================================
 # ========================= Main routine ===============================
 # ======================================================================
@@ -445,19 +489,27 @@ try:
 
     telegraph = create_or_attach_to_telegraph_account()
 
-    dirs_list = get_sub_dirs_list(read_args.input_folder)
+    if PAGE_SPECIFIED:
+        recreate_page()
 
-    for set_directory in dirs_list:
-        try:
-            url, __count = elaborate_directory(set_directory)
-            add_page_to_results(set_directory, url, __count)
+    else:
+        dirs_list = get_sub_dirs_list(read_args.input_folder)
 
-        except BaseException as e:
-            logger.fatal(set_directory + ' could not be uploaded.\nError: ' + str(e) + '\n' + str(traceback.format_exc()))
+        for set_directory in dirs_list:
+            try:
+                url, __count = elaborate_directory(set_directory)
+                add_page_to_results(set_directory, url, __count)
+
+            except BaseException as e:
+                logger.fatal(set_directory + ' could not be uploaded.\nError: ' + str(e) + '\n' + str(traceback.format_exc()))
+
+except SystemExit:
+    os._exit(0)
 
 except BaseException as e:
     logger.fatal("Critical error: " + str(e) + '\n' + str(traceback.format_exc()))
+    os._exit(1)
 
-sys.exit()
+os._exit(0)
 
 
