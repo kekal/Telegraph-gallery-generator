@@ -14,7 +14,8 @@ import re
 ACCESS_TOKEN = ""
 CHAT_URL = "https://my_page"
 RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
-EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif")
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".mp4")
+VIDEO_EXTENSIONS = (".mp4")
 HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
@@ -216,13 +217,15 @@ def parse_error(message):
 
 def upload_images(__file_names, __directory, __errors):
     image_paths = []
+    video_paths = []
     for __file_name in __file_names:
         __upload_path =  __full_path = __directory + '\\' + __file_name
 
         logger.info("\nUploading: " + __full_path)
 
-        if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
-            __upload_path = run_image_downgrade(__full_path)
+        if not is_video_type(__file_name):
+            if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
+                __upload_path = run_image_downgrade(__full_path)
 
         try:
             image_path = upload.upload_file(__upload_path)
@@ -248,12 +251,15 @@ def upload_images(__file_names, __directory, __errors):
         except IOError as __e:
             pass
 
-        image_paths.append(image_path[0])
+        if is_video_type(__file_name):
+            video_paths.append(image_path[0])
+        else:
+            image_paths.append(image_path[0])
         time.sleep(PAUSE)
 
     remove_uploaded_folder(__directory)
 
-    return image_paths
+    return image_paths, video_paths
 
 
 def validate_file(__full_path):
@@ -278,6 +284,10 @@ def validate_image_dimensions(__full_path):
 def validate_file_size(full_path):
     __file_size = os.stat(full_path).st_size
     return True if __file_size < SIZE else False
+
+
+def is_video_type(__file_name):
+    return __file_name.lower().endswith(VIDEO_EXTENSIONS)
 
 
 def run_image_downgrade(__full_path):
@@ -392,10 +402,12 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
         logger.error("     " + str(__e) + '\n' + str(traceback.format_exc()))
 
 
-def create_page_body(__image_urls):
+def create_page_body(__image_urls, __video_urls):
     body = '<p><a href="' + CHAT_URL + '" target="_blank">'+ HEADER_NAME +'</a></p>'
     for __url in __image_urls:
         body += " <img src='{}'/>".format(__url)
+    for __url in __video_urls:
+        body += " <video src='{}' preload = \"auto\" controls = \"controls\"/>".format(__url)
 
     return body
 
@@ -430,15 +442,15 @@ def elaborate_directory(__set_directory):
 
     file_names = analyze_folder_content(__set_directory)
 
-    image_urls = upload_images(file_names, __set_directory, errors_list)
+    image_urls, video_urls = upload_images(file_names, __set_directory, errors_list)
 
     print_errors(errors_list)
 
-    content = create_page_body(image_urls)
+    content = create_page_body(image_urls, video_urls)
     post_link = post(__set_directory, content)
     logger.info('\n' + post_link + '\n\n')
 
-    return post_link, len(image_urls)
+    return post_link, len(image_urls) + len(video_urls)
 
 
 def add_page_to_results(__set_name, __url, _count):
