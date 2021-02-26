@@ -23,7 +23,8 @@ HEIGHT = 5000
 TOTAL_DIMENSION_THRESHOLD = 10000
 DIMENSIONS_OVERWRITTEN = False
 PAGE_SPECIFIED = False
-DOWN_LOAD_PAGE_SPECIFIED = False
+DOWNLOAD_PAGE_SPECIFIED = False
+DOWNLOAD_LIST_SPECIFIED = False
 SIZE = 5000000
 PAUSE = 2
 DOMAIN = "https://telegra.ph"
@@ -35,9 +36,11 @@ RESULTS_FILE_NAME = "results.txt"
 
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph==1.4.1"])
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow==8.0.1"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators==0.18.2"])
 
 from telegraph import Telegraph, upload
 from PIL import Image
+import validators
 
 # ======================================================================
 # ======================================================================
@@ -52,6 +55,7 @@ class ReadArgs:
     size = -1
     page=''
     page_down=''
+    list_down=''
 
 
 def setup_logger():
@@ -95,9 +99,13 @@ def validate_folder(__dir):
 def read_validate_input() -> ReadArgs:
     args = parse_input()
 
+    if validate_file(args.list_down):
+        global DOWNLOAD_LIST_SPECIFIED
+        DOWNLOAD_LIST_SPECIFIED = True
+
     if validate_file(args.page_down):
-        global DOWN_LOAD_PAGE_SPECIFIED
-        DOWN_LOAD_PAGE_SPECIFIED = True
+        global DOWNLOAD_PAGE_SPECIFIED
+        DOWNLOAD_PAGE_SPECIFIED = True
 
     if validate_file(args.page):
         global PAGE_SPECIFIED
@@ -183,8 +191,9 @@ def validate_natural(_natural):
 
 def parse_input():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-pa', '--page', help='↑ Upload existing html page', type=str)
-    parser.add_argument('-pd', '--page_download', help='↑ Download existing html page', type=str)
+    parser.add_argument('-pa', '--page', help='↑ Upload existing html page from URL', type=str)
+    parser.add_argument('-pd', '--page_download', help='↑ Download existing HTML page locally', type=str)
+    parser.add_argument('-ld', '--list_download', help='↑ Download existing HTML pages locally from the list in the input text file', type=str)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str)
     parser.add_argument('-t', '--token', help='↑ Account token', type=str)
@@ -195,6 +204,7 @@ def parse_input():
 
     parser.error = parse_error
 
+    args = None
     try:
         args = parser.parse_args()
     except TypeError:
@@ -215,6 +225,7 @@ def parse_input():
     __args.size = args.size
     __args.page = args.page
     __args.page_down = args.page_download
+    __args.list_down = args.list_download
 
     return __args
 
@@ -492,10 +503,29 @@ def recreate_page():
     logger.info('\n' + post_link + '\n\n')
 
 
-def download_page():
-    logger.info('Fetching ' + read_args.page_down)
+def download_from_list():
+    url_list = []
+    try:
+        url_list = open(read_args.list_down, "r")
+        url_list = url_list.read().split("\n")
+    except OSError:
+        logger.error('URL list cannot be read')
 
-    f = urllib.request.urlopen(read_args.page_down)
+    for url_str in url_list:
+        if validators.url(url_str):
+            download_page(url_str)
+
+
+def download_page(page = ''):
+    if page == '' or page is None:
+        if (not DOWNLOAD_PAGE_SPECIFIED) or DOWNLOAD_LIST_SPECIFIED:
+            return
+
+        logger.info('Fetching ' + read_args.page_down)
+        page = read_args.page_down
+
+
+    f = urllib.request.urlopen(page)
     body = f.read().decode('utf-8')
     title_pat = re.compile(r'<title([^<]*)')
     try:
@@ -515,6 +545,7 @@ def download_page():
     try:
         if os.path.isdir(title) is False:
             os.mkdir(title)
+            logger.info(' ')
             logger.info('Folder ' + title + ' created.')
         else:
             logger.warning('Folder ' + title + ' already exists.')
@@ -522,7 +553,6 @@ def download_page():
     except OSError:
         logger.error('Folder creation failed')
         return
-
 
 
     pat = re.compile(r'<img [^>]*src="([^"]+)')
@@ -566,8 +596,11 @@ try:
     if PAGE_SPECIFIED:
         recreate_page()
 
-    elif DOWN_LOAD_PAGE_SPECIFIED:
+    elif DOWNLOAD_PAGE_SPECIFIED:
         download_page()
+
+    elif DOWNLOAD_LIST_SPECIFIED:
+        download_from_list()
 
     else:
         dirs_list = get_sub_dirs_list(read_args.input_folder)
