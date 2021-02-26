@@ -93,6 +93,7 @@ def read_validate_input() -> ReadArgs:
     args = parse_input()
 
     if validate_file(args.page):
+        global PAGE_SPECIFIED
         PAGE_SPECIFIED = True
 
     if not validate_folder(args.input_folder):
@@ -266,8 +267,6 @@ def validate_file(__full_path):
     if __full_path is None or __full_path == "":
         return False
     else:
-        global PAGE_SPECIFIED
-        PAGE_SPECIFIED = True
         return True
 
 
