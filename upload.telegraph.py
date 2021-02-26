@@ -9,6 +9,7 @@ import time
 import logging
 import logging.handlers
 import urllib.request
+import requests
 import re
 
 ACCESS_TOKEN = ""
@@ -22,6 +23,7 @@ HEIGHT = 5000
 TOTAL_DIMENSION_THRESHOLD = 10000
 DIMENSIONS_OVERWRITTEN = False
 PAGE_SPECIFIED = False
+DOWN_LOAD_PAGE_SPECIFIED = False
 SIZE = 5000000
 PAUSE = 2
 DOMAIN = "https://telegra.ph"
@@ -49,6 +51,7 @@ class ReadArgs:
     width = -1
     size = -1
     page=''
+    page_down=''
 
 
 def setup_logger():
@@ -91,6 +94,10 @@ def validate_folder(__dir):
 
 def read_validate_input() -> ReadArgs:
     args = parse_input()
+
+    if validate_file(args.page_down):
+        global DOWN_LOAD_PAGE_SPECIFIED
+        DOWN_LOAD_PAGE_SPECIFIED = True
 
     if validate_file(args.page):
         global PAGE_SPECIFIED
@@ -177,6 +184,7 @@ def validate_natural(_natural):
 def parse_input():
     parser = argparse.ArgumentParser()
     parser.add_argument('-pa', '--page', help='↑ Upload existing html page', type=str)
+    parser.add_argument('-pd', '--page_download', help='↑ Download existing html page', type=str)
     parser.add_argument('-i', '--input', help='↑ Input folder', type=str)
     parser.add_argument('-o', '--output', help='↑ Output folder', type=str)
     parser.add_argument('-t', '--token', help='↑ Account token', type=str)
@@ -206,6 +214,7 @@ def parse_input():
     __args.width = args.width
     __args.size = args.size
     __args.page = args.page
+    __args.page_down = args.page_download
 
     return __args
 
@@ -482,6 +491,60 @@ def recreate_page():
     post_link = post(title, content)
     logger.info('\n' + post_link + '\n\n')
 
+
+def download_page():
+    logger.info('Fetching ' + read_args.page_down)
+
+    f = urllib.request.urlopen(read_args.page_down)
+    body = f.read().decode('utf-8')
+    title_pat = re.compile(r'<title([^<]*)')
+    try:
+        title = title_pat.findall(body)[0]
+        title = title.replace('Telegraph', '')
+        title = title.strip()
+        title = title.strip('>')
+        title = title.strip()
+        title = title.strip('–')
+        title = title.strip()
+
+
+    except IndexError:
+        title = 'Unknown'
+        logger.warning('There is no title. \'Unknown\' string will be used.')
+
+    try:
+        if os.path.isdir(title) is False:
+            os.mkdir(title)
+            logger.info('Folder ' + title + ' created.')
+        else:
+            logger.warning('Folder ' + title + ' already exists.')
+
+    except OSError:
+        logger.error('Folder creation failed')
+        return
+
+
+
+    pat = re.compile(r'<img [^>]*src="([^"]+)')
+    image_urls = pat.findall(body)
+    image_urls = list(map(lambda s: ['https://telegra.ph' + str(s), str(s).split(".")[-1]], image_urls))
+
+    img_num = 1
+    for image_url in image_urls:
+        logger.info(' ')
+        logger.info('Downloading ' + str(image_url[0]))
+
+        r = requests.get(image_url[0], allow_redirects=True)
+        file_name = str(img_num).zfill(3) + '.' + str(image_url[1])
+        with open(os.path.join(os.path.dirname(__file__), title, file_name), 'wb') as output_file:
+            output_file.write(r.content)
+
+        logger.info(file_name + ' written down.')
+
+        img_num += 1
+        time.sleep(PAUSE)
+
+
 # ======================================================================
 # ========================= Main routine ===============================
 # ======================================================================
@@ -502,6 +565,9 @@ try:
 
     if PAGE_SPECIFIED:
         recreate_page()
+
+    elif DOWN_LOAD_PAGE_SPECIFIED:
+        download_page()
 
     else:
         dirs_list = get_sub_dirs_list(read_args.input_folder)
