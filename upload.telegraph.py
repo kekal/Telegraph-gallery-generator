@@ -478,29 +478,7 @@ def add_page_to_results(__set_name, __url, _count):
     f.close()
 
 
-def recreate_page():
-    f = urllib.request.urlopen(read_args.page)
-    body = f.read().decode('utf-8')
-    title_pat = re.compile(r'<title([^<]*)')
-    title = 'Album'
-    try:
-        title = title_pat.findall(body)[0]
-        title = title.replace('Telegraph', '')
-        title = title.strip()
-        title = title.strip('>')
-        title = title.strip()
-        title = title.strip('–')
-        title = title.strip()
 
-    except IndexError:
-        logger.info('There is no title. Empty string will be used.')
-
-
-    pat = re.compile(r'<img [^>]*src="([^"]+)')
-    image_urls = pat.findall(body)
-    content = create_page_body(image_urls)
-    post_link = post(title, content)
-    logger.info('\n' + post_link + '\n\n')
 
 
 def download_from_list():
@@ -524,10 +502,22 @@ def download_page(page = ''):
         logger.info('Fetching ' + read_args.page_down)
         page = read_args.page_down
 
+    body, title = read_web_page_from_url(page)
 
+    if not check_or_create_folder(title):
+        return
+
+    image_urls = get_image_links_from_html(body)
+    image_urls = list(map(lambda s: ['https://telegra.ph' + str(s), str(s).split(".")[-1]], image_urls))
+
+    download_images(image_urls, title)
+
+
+def read_web_page_from_url(page):
     f = urllib.request.urlopen(page)
     body = f.read().decode('utf-8')
     title_pat = re.compile(r'<title([^<]*)')
+    title = 'Unknown'
     try:
         title = title_pat.findall(body)[0]
         title = title.replace('Telegraph', '')
@@ -537,28 +527,43 @@ def download_page(page = ''):
         title = title.strip('–')
         title = title.strip()
 
-
     except IndexError:
-        title = 'Unknown'
         logger.warning('There is no title. \'Unknown\' string will be used.')
 
+    return body, title
+
+
+def check_or_create_folder(name):
     try:
-        if os.path.isdir(title) is False:
-            os.mkdir(title)
+        if os.path.isdir(name) is False:
+            os.mkdir(name)
             logger.info(' ')
-            logger.info('Folder ' + title + ' created.')
+            logger.info('Folder ' + name + ' created.')
         else:
-            logger.warning('Folder ' + title + ' already exists.')
+            logger.warning('Folder ' + name + ' already exists.')
+
+        return True
 
     except OSError:
         logger.error('Folder creation failed')
-        return
+        return False
 
 
+def get_image_links_from_html(body):
     pat = re.compile(r'<img [^>]*src="([^"]+)')
     image_urls = pat.findall(body)
-    image_urls = list(map(lambda s: ['https://telegra.ph' + str(s), str(s).split(".")[-1]], image_urls))
+    return image_urls
 
+
+def recreate_page():
+    body, title = read_web_page_from_url(read_args.page)
+
+    image_urls = get_image_links_from_html(body)
+    content = create_page_body(image_urls)
+    post_link = post(title, content)
+    logger.info('\n' + post_link + '\n\n')
+
+def download_images(image_urls, path):
     img_num = 1
     for image_url in image_urls:
         logger.info(' ')
@@ -566,7 +571,7 @@ def download_page(page = ''):
 
         r = requests.get(image_url[0], allow_redirects=True)
         file_name = str(img_num).zfill(3) + '.' + str(image_url[1])
-        with open(os.path.join(os.path.dirname(__file__), title, file_name), 'wb') as output_file:
+        with open(os.path.join(os.path.dirname(__file__), path, file_name), 'wb') as output_file:
             output_file.write(r.content)
 
         logger.info(file_name + ' written down.')
