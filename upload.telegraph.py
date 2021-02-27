@@ -503,6 +503,7 @@ def download_page(page = ''):
         page = read_args.page_down
 
     body, title = read_web_page_from_url(page)
+    title = get_name_from_url(page)
 
     if not check_or_create_folder(title):
         return
@@ -511,6 +512,16 @@ def download_page(page = ''):
     image_urls = list(map(lambda s: ['https://telegra.ph' + str(s), str(s).split(".")[-1]], image_urls))
 
     download_images(image_urls, title)
+
+
+def get_name_from_url(page):
+    name = page.split("/")[-1]
+    name = name.strip()
+    name = name.replace("-", " ")
+    name = name.replace("  ", " ")
+    name = name.replace("  ", " ")
+    name = name.strip()
+    return name
 
 
 def read_web_page_from_url(page):
