@@ -570,7 +570,7 @@ def recreate_page():
     body, title = read_web_page_from_url(read_args.page)
 
     image_urls = get_image_links_from_html(body)
-    content = create_page_body(image_urls)
+    content = create_page_body(image_urls,[])
     post_link = post(title, content)
     logger.info('\n' + post_link + '\n\n')
 
