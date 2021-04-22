@@ -244,9 +244,14 @@ def upload_images(__file_names, __directory, __errors):
 
         logger.info("\nUploading: " + __full_path)
 
-        if not is_video_type(__file_name):
-            if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
-                __upload_path = run_image_downgrade(__full_path)
+        try:
+            if not is_video_type(__file_name):
+                if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
+                    __upload_path = run_image_downgrade(__full_path)
+        except OSError as __e:
+            logger.error("     The image " + __file_name + " is corrupted. Will skip.\n     Error:   " + str(__e))
+            __errors.append(str(__file_name) + ' : ' + str(__e))
+            continue
 
         try:
             image_path = upload.upload_file(__upload_path)
