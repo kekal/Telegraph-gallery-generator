@@ -59,7 +59,7 @@ class ReadArgs:
 
 
 def setup_logger():
-    handler_file = logging.handlers.WatchedFileHandler(os.environ.get("LOGFILE", LOG_FILE_NAME))
+    handler_file = logging.handlers.WatchedFileHandler(os.environ.get("LOGFILE", LOG_FILE_NAME), encoding = 'utf8')
     std_handler = logging.StreamHandler(sys.stdout)
     formatter_for_file = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
     formatter_for_std = logging.Formatter('%(message)s')
