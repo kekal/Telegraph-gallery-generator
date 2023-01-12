@@ -479,7 +479,7 @@ def elaborate_directory(__set_directory):
 
 
 def add_page_to_results(__set_name, __url, _count):
-    f = open(RESULTS_FILE_NAME, "a")
+    f = open(RESULTS_FILE_NAME, "a", encoding = "utf-8")
     f.write(__set_name + ' : ' + str(_count) + ' : ' + __url + '\n')
     f.close()
 
