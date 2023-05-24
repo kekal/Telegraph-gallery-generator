@@ -1,7 +1,22 @@
 
 # coding=utf-8
+
 import subprocess
 import sys
+
+# ======================================================================
+# ======================================================================
+
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph==1.4.1"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow==9.3"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators==0.18.2"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "requests==2.22.0"])
+
+
+# ======================================================================
+# ======================================================================
+
+
 import traceback
 import os
 import argparse
@@ -31,13 +46,7 @@ DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
 RESULTS_FILE_NAME = "results.txt"
 
-# ======================================================================
-# ======================================================================
 
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph==1.4.1"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow==8.0.1"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators==0.18.2"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "requests==2.22.0"])
 
 from telegraph import Telegraph, upload
 from PIL import Image
