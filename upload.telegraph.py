@@ -7,10 +7,12 @@ import sys
 # ======================================================================
 # ======================================================================
 
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph==1.4.1"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow==9.3"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators==0.18.2"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "requests==2.22.0"])
+
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "requests"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "selenium", "webdriver-manager"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph"])
 
 
 # ======================================================================
@@ -28,10 +30,12 @@ import requests
 import re
 
 ACCESS_TOKEN = ""
+CYBERDROP_TOKEN = ""
+CYBERDROP_ALBUM = ""
 CHAT_URL = "https://my_page"
 RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
 EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".mp4")
-VIDEO_EXTENSIONS = (".mp4")
+VIDEO_EXTENSIONS = ".mp4"
 HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
@@ -46,10 +50,16 @@ DOMAIN = "https://telegra.ph"
 LOG_FILE_NAME = "log.txt"
 RESULTS_FILE_NAME = "results.txt"
 
-
-
-from telegraph import Telegraph, upload
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+from telegraph import Telegraph
 from PIL import Image
+from urllib.parse import urlparse, urlunparse
 import validators
 
 # ======================================================================
@@ -154,9 +164,9 @@ def read_validate_input() -> ReadArgs:
         global DIMENSIONS_OVERWRITTEN
         DIMENSIONS_OVERWRITTEN = True
         if WIDTH * HEIGHT >= TOTAL_DIMENSION_THRESHOLD:
-            logger.warn("======== Warning ========")
-            logger.warn("The selected dimensions are greater than 10,000 pixels in total. The server will most likely reject these options.")
-            logger.warn("")
+            logger.warning("======== Warning ========")
+            logger.warning("The selected dimensions are greater than 10,000 pixels in total. The server will most likely reject these options.")
+            logger.warning("")
 
     if validate_natural(args.size):
         global SIZE
@@ -245,57 +255,150 @@ def parse_error(message):
     logger.fatal("     " + str(message))
     logger.fatal("\n")
 
-
-def upload_images(__file_names, __directory, __errors):
-    image_paths = []
-    video_paths = []
-    for __file_name in __file_names:
-        __upload_path =  __full_path = __directory + '\\' + __file_name
-
-        logger.info("\nUploading: " + __full_path)
-
-        try:
-            if not is_video_type(__file_name):
-                if (not validate_image_dimensions(__full_path)) or (not validate_file_size(__full_path)):
-                    __upload_path = run_image_downgrade(__full_path)
-        except OSError as __e:
-            logger.error("     The image " + __file_name + " is corrupted. Will skip.\n     Error:   " + str(__e))
-            __errors.append(str(__file_name) + ' : ' + str(__e))
-            continue
-
-        try:
-            image_path = upload.upload_file(__upload_path)
-        except upload.TelegraphException as __e:
-            body = getattr(__e, 'doc', '')
-            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(
-                __e) + '\n     Error body:\n' + str(body))
-            __errors.append(str(__file_name) + ' : ' + str(__e))
-            continue
-        except BaseException as __e:
-            body = getattr(__e, 'doc', '')
-            logger.error("     File " + str(__file_name) + " will be skipped.\n     Error:   " + str(__e) + '\n     Error body:\n' + str(body) + '\n' + str(traceback.format_exc()))
-            __errors.append(str(__file_name) + ' : ' + str(__e))
-            continue
-
-        logger.info("Uploaded:  " + DOMAIN + image_path[0])
-
-        move_image_to_output_folder(__full_path, __directory, __file_name)
-
-        try:
-            os.remove(__upload_path)
-            logger.info("Temporary file " + str(__upload_path) + " removed.")
-        except IOError as __e:
-            pass
-
-        if is_video_type(__file_name):
-            video_paths.append(image_path[0])
+def get_available_server():
+    try:
+        headers = {'token': CYBERDROP_TOKEN}
+        response = requests.get("https://cyberdrop.me/api/node", headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            if data['success']:
+                return data['url'].rstrip('/')
+            else:
+                logger.error("Failed to fetch available server: " + str(data))
         else:
-            image_paths.append(image_path[0])
-        time.sleep(PAUSE)
+            logger.error(f"Failed to get server, Status Code: {response.status_code}")
+    except Exception as _e:
+        logger.error(f"Error fetching available server: {_e}")
+    return None
 
-    remove_uploaded_folder(__directory)
 
-    return image_paths, video_paths
+def get_direct_image_link(page_url, driver):
+    try:
+        driver.get(page_url)
+
+        wait = WebDriverWait(driver, 20)
+        download_btn = wait.until(ec.element_to_be_clickable((By.ID, 'downloadBtn')))
+        wait.until(ec.element_attribute_to_include((By.ID, 'downloadBtn'), 'href'))
+
+        direct_link = download_btn.get_attribute('href')
+
+        # clean link has undefined behaviour
+        # parsed_url = urlparse(direct_link)
+        # direct_link = urlunparse(parsed_url._replace(query=''))
+
+        if direct_link:
+            return direct_link
+        else:
+            logger.error(f"Download link not found on page: {page_url}")
+
+            # Save page source and screenshot
+            timestamp = int(time.time())
+            with open(f'debug_page_source_{timestamp}.html', 'w', encoding='utf-8') as f:
+                f.write(driver.page_source)
+            driver.save_screenshot(f'debug_screenshot_{timestamp}.png')
+            logger.info(f"Saved page source and screenshot for debugging.")
+
+            return None
+
+    except Exception as _e:
+        logger.error(f"Error fetching direct image link from {page_url}: {_e}")
+        return None
+
+
+def upload_images(file_names, directory, errors):
+    image_urls = []
+    video_urls = []
+
+    server_url = get_available_server()
+    if server_url is None:
+        logger.error("No server available. Exiting.")
+        return [], []
+
+    service = Service(ChromeDriverManager().install())
+
+    chrome_options = Options()
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
+                 "(KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36"
+    chrome_options.add_argument(f'user-agent={user_agent}')
+    chrome_options.add_argument("--headless")
+    chrome_options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    try:
+        for file_name in file_names:
+            upload_path = full_path = os.path.join(directory, file_name)
+
+            logger.info("\nUploading: " + str(full_path))
+
+            try:
+                if not is_video_type(file_name):
+                    if (not validate_image_dimensions(full_path)) or (not validate_file_size(full_path)):
+                        upload_path = run_image_downgrade(full_path)
+            except OSError as _e:
+                logger.error("     The image " + file_name + " is corrupted. Will skip.\n     Error:   " + str(_e))
+                errors.append(str(file_name) + ' : ' + str(e))
+                continue
+
+            try:                
+                with open(upload_path, 'rb') as f:
+                    files = {'files[]': f}
+                    headers = {'token': CYBERDROP_TOKEN, 'albumid': CYBERDROP_ALBUM}
+                    response = requests.post(f"{server_url}", headers=headers, files=files)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['success']:
+                            page_url = data['files'][0]['url']
+                            logger.info("Uploaded:  " + page_url)
+
+                            direct_link = get_direct_image_link(page_url, driver)
+                            if direct_link:
+                                if is_video_type(file_name):
+                                    video_urls.append(direct_link)
+                                else:
+                                    image_urls.append(direct_link)
+                                logger.info("Direct image link obtained: " + str(direct_link))
+                            else:
+                                logger.error("Failed to obtain direct link for " + file_name)
+                                errors.append(file_name + ' : Failed to obtain direct link')
+                                continue
+                        else:
+                            error_msg = data.get('description', 'Unknown error')
+                            logger.error("Upload failed for " + file_name + ": " + error_msg)
+                            errors.append(file_name + ' : ' + error_msg)
+                            continue
+                    else:
+                        logger.error("Failed to upload " + file_name + ". HTTP Status Code: " + str(response.status_code))
+                        errors.append(file_name + ' : HTTP Status Code ' + str(response.status_code))
+                        continue
+            except Exception as _e:
+
+                logger.error("     File " + file_name + " will be skipped.\n     Error:   " + str(_e))
+                errors.append(str(file_name) + ' : ' + str(_e))
+
+                logs = driver.get_log('browser')
+                for entry in logs:
+                    errors.append(f"Console Log: {entry}")
+                continue
+
+            move_image_to_output_folder(full_path, directory, file_name)
+
+            try:
+                if upload_path != full_path:
+                    os.remove(upload_path)
+                    logger.info("Temporary file " + str(upload_path) + " removed.")
+            except IOError:
+                pass
+
+            time.sleep(PAUSE)
+
+    finally:
+        # Close chrome
+        driver.quit()
+
+    remove_uploaded_folder(directory)
+
+    return image_urls, video_urls
 
 
 def validate_file(__full_path):
@@ -377,7 +480,7 @@ def downscale(__im):
         __new_height = int(__height * _factor)
 
 
-    __im = __im.resize((__new_width, __new_height), Image.ANTIALIAS)
+    __im = __im.resize((__new_width, __new_height), Image.LANCZOS)
 
     logger.info("The image resolution changed to " + str(__new_width) + " x " + str(__new_height))
     return __im
@@ -436,13 +539,12 @@ def move_image_to_output_folder(__old_path, __set_name, __file_name):
         logger.error("     " + str(__e) + '\n' + str(traceback.format_exc()))
 
 
-def create_page_body(__image_urls, __video_urls):
-    body = '<p><a href="' + CHAT_URL + '" target="_blank">'+ HEADER_NAME +'</a></p>'
-    for __url in __image_urls:
-        body += " <img src='{}'/>".format(__url)
-    for __url in __video_urls:
-        body += " <video src='{}' preload = \"auto\" controls = \"controls\"/>".format(__url)
-
+def create_page_body(image_urls, video_urls):
+    body = '<p><a href="' + CHAT_URL + '" target="_blank">' + HEADER_NAME + '</a></p>\n'
+    for _url in image_urls:
+        body += " <img src='{}'/>".format(_url)
+    for _url_v in video_urls:
+        body += " <video src='{}' preload='auto' controls='controls'></video>".format(_url_v)
     return body
 
 
