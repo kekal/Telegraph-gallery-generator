@@ -7,13 +7,11 @@ import sys
 # ======================================================================
 # ======================================================================
 
-
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "Pillow"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "validators"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "requests"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "selenium", "webdriver-manager"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "telegraph"])
-
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "Pillow==10.4.0"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "validators==0.34.0"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "requests==2.32.3"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "selenium==4.24.0", "webdriver-manager==4.0.2"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "telegraph==2.2.0"])
 
 # ======================================================================
 # ======================================================================
@@ -164,7 +162,7 @@ class Utils:
             __new_width = int(__width * _factor)
             __new_height = int(__height * _factor)
 
-        __im = __im.resize((__new_width, __new_height), Image.LANCZOS)
+        __im = __im.resize((__new_width, __new_height), Image.Resampling.LANCZOS)
 
         logger.info("The image resolution changed to " + str(__new_width) + " x " + str(__new_height))
         return __im
@@ -652,8 +650,9 @@ class Imgbb:
                 if response.status_code == 200:
                     return response.json()
                 else:
-                    logger.error(f"Failed to upload file to imgbb. HTTP Status Code: {response.status_code}")
-                    errors.append(f"File upload failed to imgbb: HTTP Status Code {response.status_code}")
+                    error_detail = response.json().get('error', {}).get('message', 'No error message provided')
+                    logger.error(f"Failed to upload file to imgbb. HTTP Status Code: {response.status_code} - {error_detail}")
+                    errors.append(f"File upload failed to imgbb: HTTP Status Code {response.status_code} - {error_detail}")
                     return None
         except Exception as _e:
             logger.error(f"Error uploading file to imgbb: {_e}")
