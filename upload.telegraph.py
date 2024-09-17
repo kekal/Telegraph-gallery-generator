@@ -32,6 +32,8 @@ import re
 ACCESS_TOKEN = ""
 CYBERDROP_TOKEN = ""
 CYBERDROP_ALBUM = ""
+IMGBB_API = ''
+IMGBB_URL = 'https://api.imgbb.com/1/upload'
 CHAT_URL = "https://my_page"
 RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
 EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".mp4")
@@ -96,9 +98,6 @@ class Utils:
         root.addHandler(std_handler)
 
         return root
-
-
-
 
 
     @staticmethod
@@ -640,6 +639,75 @@ class Cyberdrop:
             errors.append(f"{file_name} : {_e}")
             return None
 
+class Imgbb:
+
+    @staticmethod
+    def upload_file_to_imgbb(upload_path, errors):
+        try:
+            with open(upload_path, 'rb') as f:
+                files = {'image': f}
+                payload = {'key': IMGBB_API}
+                response = requests.post(IMGBB_URL, files=files, data=payload)
+
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    logger.error(f"Failed to upload file to imgbb. HTTP Status Code: {response.status_code}")
+                    errors.append(f"File upload failed to imgbb: HTTP Status Code {response.status_code}")
+                    return None
+        except Exception as _e:
+            logger.error(f"Error uploading file to imgbb: {_e}")
+            errors.append(f"File upload error to imgbb: {_e}")
+            return None
+
+    @staticmethod
+    def handle_image_upload_to_imgbb(file_name, directory, errors, image_urls, video_urls):
+        upload_path = Utils.prepare_file_for_upload(file_name, directory, errors)
+        if upload_path is None:
+            return
+
+        response = Imgbb.upload_file_to_imgbb(upload_path, errors)
+        if response is None:
+            return
+
+        direct_link = Imgbb.process_direct_link_imgbb(response, file_name, errors)
+        if direct_link:
+            if FileSystem.is_video_type(file_name):
+                video_urls.append(direct_link)
+            else:
+                image_urls.append(direct_link)
+
+        FileSystem.clean_up_file(upload_path, directory, file_name)
+
+    @staticmethod
+    def process_direct_link_imgbb(response, file_name, errors):
+        try:
+            if response and 'data' in response and 'url' in response['data']:
+                direct_link = response['data']['url']
+                logger.info(f"Direct image link obtained from imgbb: {direct_link}")
+                return direct_link
+            else:
+                error_msg = response.get('error', 'Unknown error from imgbb')
+                logger.error(f"Failed to obtain direct link for {file_name} from imgbb: {error_msg}")
+                errors.append(f"{file_name} : Failed to obtain direct link from imgbb")
+                return None
+        except Exception as _e:
+            logger.error(f"Error processing direct image link from imgbb for {file_name}: {_e}")
+            errors.append(f"{file_name} : {_e}")
+            return None
+
+    @staticmethod
+    def upload_images_to_imgbb(file_names, directory, errors):
+        image_urls, video_urls = [], []
+        try:
+            for file_name in file_names:
+                Imgbb.handle_image_upload_to_imgbb(file_name, directory, errors, image_urls, video_urls)
+                time.sleep(PAUSE)
+
+        finally:
+            FileSystem.remove_uploaded_folder(directory)
+
+        return image_urls, video_urls
 
 
 class ExistingPostRoutines:
@@ -725,13 +793,16 @@ class ExistingPostRoutines:
 
 
 
+
+
 def elaborate_directory(__set_directory):
     logger.info("\nWorking in directory " + __set_directory + "...\n")
     errors_list = []
 
     file_names = FileSystem.analyze_folder_content(__set_directory)
 
-    image_urls, video_urls = Cyberdrop.upload_images_to_cyberdrop(file_names, __set_directory, errors_list)
+    # image_urls, video_urls = Cyberdrop.upload_images_to_cyberdrop(file_names, __set_directory, errors_list)
+    image_urls, video_urls = Imgbb.upload_images_to_imgbb(file_names, __set_directory, errors_list)
 
     Utils.print_errors(errors_list)
 
