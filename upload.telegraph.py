@@ -27,28 +27,41 @@ import urllib.request
 import requests
 import re
 
-ACCESS_TOKEN = ""
+
+# =========== Do not change anything outside this block ===========
+
+TELEGRAPH_ACCESS_TOKEN = ""
+
 CYBERDROP_TOKEN = ""
 CYBERDROP_ALBUM = ""
-IMGBB_API = ''
-IMGBB_URL = 'https://api.imgbb.com/1/upload'
-CHAT_URL = "https://my_page"
-RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
-EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".mp4")
-VIDEO_EXTENSIONS = ".mp4"
+
+IMGBB_API = ""
+
+AUTHOR_URL = "https://my_page"
 HEADER_NAME = "My albums page"
 WIDTH = 5000
 HEIGHT = 5000
 TOTAL_DIMENSION_THRESHOLD = 10000
+SIZE = 5000000
+PAUSE = 2
+
+LOG_FILE_NAME = "log.txt"
+RESULTS_FILE_NAME = "results.txt"
+
+# =================================================================
+
+TELEGRAPH_DOMAIN = "https://telegra.ph"
+IMGBB_DOMAIN = "https://api.imgbb.com/1/upload"
+
+RESERVED_FOLDERS = ['temp', '.idea', 'old', '.git', 'Old']
+EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".mp4")
+VIDEO_EXTENSIONS = ".mp4"
+
 DIMENSIONS_OVERWRITTEN = False
 PAGE_SPECIFIED = False
 DOWNLOAD_PAGE_SPECIFIED = False
 DOWNLOAD_LIST_SPECIFIED = False
-SIZE = 5000000
-PAUSE = 2
-DOMAIN = "https://telegra.ph"
-LOG_FILE_NAME = "log.txt"
-RESULTS_FILE_NAME = "results.txt"
+
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -292,7 +305,7 @@ class Utils:
                 args.output_folder = args.input_folder + '\\old\\'
 
         if args.token is None or args.token == "":
-            args.token = ACCESS_TOKEN
+            args.token = TELEGRAPH_ACCESS_TOKEN
             if args.token is None or args.token == "":
                 args.token = None
 
@@ -465,7 +478,7 @@ class TelegraphRoutines:
 
     @staticmethod
     def create_page_body(image_urls, video_urls):
-        body = '<p><a href="' + CHAT_URL + '" target="_blank">' + HEADER_NAME + '</a></p>\n'
+        body = '<p><a href="' + AUTHOR_URL + '" target="_blank">' + HEADER_NAME + '</a></p>\n'
         for _url in image_urls:
             body += " <img src='{}'/>".format(_url)
         for _url_v in video_urls:
@@ -476,7 +489,7 @@ class TelegraphRoutines:
     def post(__title, __body):
         response = telegraph.create_page(__title, html_content=__body)
 
-        return '{}/{}'.format(DOMAIN, response['path'])
+        return '{}/{}'.format(TELEGRAPH_DOMAIN, response['path'])
 
 
 class Cyberdrop:
@@ -647,7 +660,7 @@ class Imgbb:
             with open(upload_path, 'rb') as f:
                 files = {'image': f}
                 payload = {'key': IMGBB_API}
-                response = requests.post(IMGBB_URL, files=files, data=payload)
+                response = requests.post(IMGBB_DOMAIN, files=files, data=payload)
 
                 if response.status_code == 200:
                     return response.json()
