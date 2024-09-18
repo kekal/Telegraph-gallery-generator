@@ -30,6 +30,9 @@ import re
 
 # =========== Do not change anything outside this block ===========
 
+STORAGE_CHOICE = "imgbb"
+# STORAGE_CHOICE = "cyberdrop"
+
 TELEGRAPH_ACCESS_TOKEN = ""
 
 CYBERDROP_TOKEN = ""
@@ -479,10 +482,29 @@ class TelegraphRoutines:
     @staticmethod
     def create_page_body(image_urls, video_urls):
         body = '<p><a href="' + AUTHOR_URL + '" target="_blank">' + HEADER_NAME + '</a></p>\n'
-        for _url in image_urls:
-            body += " <img src='{}'/>".format(_url)
-        for _url_v in video_urls:
-            body += " <video src='{}' preload='auto' controls='controls'></video>".format(_url_v)
+
+        for image_info in image_urls:
+            image_url = image_info['url']
+
+            if STORAGE_CHOICE == 'cyberdrop':# The direct URL to the image
+                thumb_url = image_info['thumb']  # The thumbnail URL
+
+                space = '​‌‍‎ ​‌‍‎'
+                space = f'{space}{space}{space}{space}{space}{space}'
+                space = f'{space}{space}{space}{space}{space}{space}{space}{space}{space}{space}'
+
+                body += f'<img src="{thumb_url}" alt="thumb" style="display: block; margin-left: auto; margin-right: auto;">'
+                body += f'{space}<a href="{image_url}" style="display: block; text-align: center;">Original</a>\n'
+                body += f'<br>'
+
+            else:
+                body += " <img src='{}'/>".format(image_url)
+
+        for video_url in video_urls:
+            body += f' <video src="{video_url}" preload="auto" controls="controls"></video>\n'
+
+
+
         return body
 
     @staticmethod
@@ -544,20 +566,20 @@ class Cyberdrop:
             return None
 
     @staticmethod
-    def upload_file_to_cyberdrop(upload_path, server_url, errors):
+    def upload_file_to_cyberdrop(upload_paths, server_url, errors):
         try:
-            with open(upload_path, 'rb') as f:
-                files = {'files[]': f}
-                headers = {'token': CYBERDROP_TOKEN, 'albumid': CYBERDROP_ALBUM}
-                response = requests.post(f"{server_url}", headers=headers, files=files)
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    logger.error(f"Failed to upload file. HTTP Status Code: {response.status_code}")
-                    errors.append(f"File upload failed: HTTP Status Code {response.status_code}")
-                    return None
+            files = [('files[]', (os.path.basename(path), open(path, 'rb'))) for path in upload_paths]
+            headers = {'token': CYBERDROP_TOKEN, 'albumid': CYBERDROP_ALBUM}
+            response = requests.post(f"{server_url}", headers=headers, files=files)
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Failed to upload files. HTTP Status Code: {response.status_code}")
+                errors.append(f"File upload failed: HTTP Status Code {response.status_code}")
+                return None
         except Exception as _e:
-            logger.error(f"Error uploading file: {_e}")
+            logger.error(f"Error uploading files: {_e}")
             errors.append(f"File upload error: {_e}")
             return None
 
@@ -577,6 +599,7 @@ class Cyberdrop:
     def upload_images_to_cyberdrop(file_names, directory, errors):
         image_urls, video_urls = [], []
         driver = Cyberdrop.setup_chrome_driver()
+        batch_size = 10
 
         try:
             server_url = Cyberdrop.get_available_server()
@@ -584,9 +607,18 @@ class Cyberdrop:
                 logger.error("No server available. Exiting.")
                 return [], []
 
+            upload_paths = []
             for file_name in file_names:
-                Cyberdrop.handle_image_upload_to_cyberdrop(file_name, directory, errors, driver, server_url, image_urls, video_urls)
-                time.sleep(PAUSE)
+                upload_path = Utils.prepare_file_for_upload(file_name, directory, errors)
+                if upload_path:
+                    upload_paths.append(upload_path)
+
+                if len(upload_paths) == batch_size:
+                    Cyberdrop.process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls)
+                    upload_paths.clear()
+
+            if upload_paths:
+                Cyberdrop.process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls)
 
         finally:
             driver.quit()
@@ -594,28 +626,7 @@ class Cyberdrop:
         FileSystem.remove_uploaded_folder(directory)
         return image_urls, video_urls
 
-    @staticmethod
-    def handle_image_upload_to_cyberdrop(file_name, directory, errors, driver, server_url, image_urls, video_urls):
-        upload_path = Utils.prepare_file_for_upload(file_name, directory, errors)
-        if upload_path is None:
-            return
 
-        response = Cyberdrop.upload_file_to_cyberdrop(upload_path, server_url, errors)
-        if response is None:
-            return
-
-        page_url = Cyberdrop.extract_page_url_from_response(response, file_name, errors)
-        if not page_url:
-            return
-
-        direct_link = Cyberdrop.process_direct_link(page_url, driver, file_name, errors)
-        if direct_link:
-            if FileSystem.is_video_type(file_name):
-                video_urls.append(direct_link)
-            else:
-                image_urls.append(direct_link)
-
-        FileSystem.clean_up_file(upload_path, directory, file_name)
 
     @staticmethod
     def setup_chrome_driver():
@@ -624,12 +635,10 @@ class Cyberdrop:
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
 
-        # Set User-Agent (Optional)
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
                      "(KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36"
         chrome_options.add_argument(f'user-agent={user_agent}')
 
-        # Set up logging preferences
         chrome_options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -651,6 +660,68 @@ class Cyberdrop:
             logger.error(f"Error extracting page URL from response for {file_name}: {_e}")
             errors.append(f"{file_name} : {_e}")
             return None
+
+    @staticmethod
+    def process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls):
+        response = Cyberdrop.upload_file_to_cyberdrop(upload_paths, server_url, errors)
+        if response is not None:
+            slugs = [file_info["url"].split("/")[-1] for file_info in response["files"]]
+            thumbnails = Cyberdrop.get_thumbnails_for_slugs(slugs, errors)
+
+            for file_info, thumbnail in zip(response["files"], thumbnails):
+                file_name = file_info["name"]
+                direct_link = file_info["url"]
+
+                link= {}
+
+                if thumbnail:
+                    link['thumb'] = thumbnail
+                else:
+                    link['thumb'] = direct_link
+
+                link['url'] = direct_link
+
+                if FileSystem.is_video_type(file_name):
+                    video_urls.append(link)
+                else:
+                    image_urls.append(link)
+
+    @staticmethod
+    def get_thumbnails_for_slugs(slugs, errors):
+        try:
+            headers = {'token': CYBERDROP_TOKEN}
+            response = requests.get('https://cyberdrop.me/api/uploads', headers=headers)
+
+            if response.status_code == 200:
+                data = response.json()
+                if data["success"]:
+                    thumbnail_urls = []
+                    for slug in slugs:
+                        matched_file = next((file for file in data["files"] if file["slug"] == slug), None)
+                        if matched_file:
+                            domain = matched_file['image']
+                            thumbnail_url = f'{domain}/{matched_file["thumb"]}'
+                            thumbnail_urls.append(thumbnail_url)
+                        else:
+                            logger.error(f"Failed to find file with slug: {slug}")
+                            errors.append(f"Failed to find file with slug: {slug}")
+                            thumbnail_urls.append(None)
+                    return thumbnail_urls
+                else:
+                    logger.error("Failed to retrieve uploads: No success response")
+                    errors.append("Failed to retrieve uploads: No success response")
+                    return [None] * len(slugs)
+            else:
+                logger.error(f"Failed to get uploads. HTTP Status Code: {response.status_code}")
+                errors.append(f"Failed to get uploads. HTTP Status Code: {response.status_code}")
+                return [None] * len(slugs)
+        except Exception as _e:
+            logger.error(f"Error fetching thumbnails: {_e}")
+            errors.append(f"Error fetching thumbnails: {_e}")
+            return [None] * len(slugs)
+
+
+
 
 class Imgbb:
 
@@ -685,11 +756,13 @@ class Imgbb:
             return
 
         direct_link = Imgbb.process_direct_link_imgbb(response, file_name, errors)
+        link = {'url': direct_link}
+
         if direct_link:
             if FileSystem.is_video_type(file_name):
-                video_urls.append(direct_link)
+                video_urls.append(link)
             else:
-                image_urls.append(direct_link)
+                image_urls.append(link)
 
         FileSystem.clean_up_file(upload_path, directory, file_name)
 
@@ -815,8 +888,13 @@ def elaborate_directory(__set_directory):
 
     file_names = FileSystem.analyze_folder_content(__set_directory)
 
-    # image_urls, video_urls = Cyberdrop.upload_images_to_cyberdrop(file_names, __set_directory, errors_list)
-    image_urls, video_urls = Imgbb.upload_images_to_imgbb(file_names, __set_directory, errors_list)
+    if STORAGE_CHOICE == 'cyberdrop':
+        image_urls, video_urls = Cyberdrop.upload_images_to_cyberdrop(file_names, __set_directory, errors_list)
+    elif STORAGE_CHOICE == 'imgbb':
+        image_urls, video_urls = Imgbb.upload_images_to_imgbb(file_names, __set_directory, errors_list)
+    else:
+        logger.error(f"Invalid storage choice: {STORAGE_CHOICE}")
+        return None, 0
 
     Utils.print_errors(errors_list)
 
@@ -833,11 +911,6 @@ def add_page_to_results(__set_name, __url, _count):
     f.close()
 
 
-
-
-
-
-
 def get_name_from_url(page):
     name = page.split("/")[-1]
     name = name.strip()
@@ -846,10 +919,6 @@ def get_name_from_url(page):
     name = name.replace("  ", " ")
     name = name.strip()
     return name
-
-
-
-
 
 def check_or_create_folder(name):
     try:
