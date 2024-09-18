@@ -391,13 +391,15 @@ class FileSystem:
         return __file_name.lower().endswith(VIDEO_EXTENSIONS)
 
     @staticmethod
-    def move_image_to_output_folder(__old_path, __set_name, __file_name):
+    def move_image_to_output_folder(__current_folder, __file_name):
         try:
-            old_folder = read_args.output_folder + '\\' + __set_name
+            old_path = os.path.join(__current_folder, __file_name)
+            old_folder = os.path.join(read_args.output_folder, __current_folder)
+
             if not os.path.exists(old_folder):
                 os.makedirs(old_folder)
 
-            os.replace(__old_path, old_folder + '\\' + __file_name)
+            os.replace(old_path, old_folder + '\\' + __file_name)
             logger.info(__file_name + ' was moved to the ' + old_folder)
 
         except BaseException as __e:
@@ -414,7 +416,7 @@ class FileSystem:
 
     @staticmethod
     def clean_up_file(upload_path, directory, file_name):
-        FileSystem.move_image_to_output_folder(upload_path, directory, file_name)
+        FileSystem.move_image_to_output_folder(directory, file_name)
 
         try:
             if os.path.exists(upload_path):
