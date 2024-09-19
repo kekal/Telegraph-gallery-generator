@@ -11,6 +11,7 @@ subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "validators==0.34.0"])
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "requests==2.32.3"])
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "selenium==4.24.0", "webdriver-manager==4.0.2"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "ipfshttpclient==0.7.0"])
 subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "telegraph==2.2.0"])
 
 # ======================================================================
@@ -30,6 +31,7 @@ import re
 
 # =========== Do not change anything outside this block ===========
 
+# STORAGE_CHOICE = "ipfs"
 STORAGE_CHOICE = "imgbb"
 # STORAGE_CHOICE = "cyberdrop"
 
@@ -75,7 +77,6 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from telegraph import Telegraph
 from PIL import Image
-# from urllib.parse import urlparse, urlunparse
 import validators
 
 # ======================================================================
@@ -797,6 +798,122 @@ class Imgbb:
         return image_urls, video_urls
 
 
+class IPFS:
+
+    @staticmethod
+    def upload_to_gateway(file_path):
+        gateway_url = 'http://127.0.0.1:5001/api/v0/add'
+
+        try:
+            with open(file_path, 'rb') as file_data:
+                response = requests.post(gateway_url, files={'file': file_data})
+                if response.status_code == 200:
+                    result = response.json()
+                    cid = result.get('Hash')
+                    if cid:
+                        logger.info(f"Successfully uploaded to {gateway_url}, CID: {cid}")
+                        return cid
+                logger.error(f"Failed to upload to {gateway_url}, Status Code: {response.status_code} - {response.content}")
+        except Exception as e:
+            logger.error(f"Error uploading to {gateway_url}: {e}")
+        return None
+
+    @staticmethod
+    def upload_file_to_local_node(upload_path, errors):
+        cid = IPFS.upload_to_gateway(upload_path)
+        if not cid:
+            error_message = f"Failed to upload {upload_path} to any IPFS gateway."
+            logger.error(error_message)
+            errors.append(error_message)
+            return None
+
+        pin_response = IPFS.pin_file(cid, errors)
+        if pin_response:
+            logger.info(f"File {upload_path} pinned locally with CID: {cid}")
+
+        ipfs_url = f'https://ipfs.io/ipfs/{cid}'
+        logger.info(f"File uploaded successfully to IPFS. Accessible at: {ipfs_url}")
+        return ipfs_url
+
+    @staticmethod
+    def handle_image_upload_to_ipfs(file_name, directory, errors, image_urls, video_urls):
+        upload_path = Utils.prepare_file_for_upload(file_name, directory, errors)
+        if upload_path is None:
+            return
+
+        ipfs_url = IPFS.upload_file_to_local_node(upload_path, errors)
+        if ipfs_url is None:
+            return
+
+        link = {'url': ipfs_url}
+        if FileSystem.is_video_type(file_name):
+            video_urls.append(link)
+        else:
+            image_urls.append(link)
+
+        FileSystem.clean_up_file(upload_path, directory, file_name)
+
+    @staticmethod
+    def upload_images_to_ipfs(file_names, directory, errors):
+        image_urls, video_urls = [],[]
+        try:
+            for file_name in file_names:
+                IPFS.handle_image_upload_to_ipfs(file_name, directory, errors, image_urls, video_urls)
+                time.sleep(PAUSE)
+        finally:
+            FileSystem.remove_uploaded_folder(directory)
+        return image_urls, video_urls
+
+    @staticmethod
+    def pin_file(cid, errors):
+        try:
+            url = f"http://127.0.0.1:5001/api/v0/pin/add?arg={cid}"
+            response = requests.post(url)
+
+            if response.status_code == 200:
+                logger.info(f"Successfully pinned CID: {cid}")
+                return True
+
+            else:
+                logger.error(f"Failed to pin CID: {cid}. Status Code: {response.status_code}")
+                errors.append(f"Pinning failed for CID: {cid}. Status Code: {response.status_code}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error pinning file to IPFS: {e}")
+            errors.append(f"Error pinning file to IPFS: {e}")
+            return False
+
+    @staticmethod
+    def print_ipfs_stats():
+        try:
+            bw_response = requests.post(f"http://127.0.0.1:5001/api/v0/stats/bw")
+            repo_response = requests.post(f"http://127.0.0.1:5001/api/v0/repo/stat")
+
+            if bw_response.status_code == 200:
+                bw_stats = bw_response.json()
+
+                print(f"Total In: {bw_stats.get('TotalIn', 'N/A')} bytes")
+                print(f"Total Out: {bw_stats.get('TotalOut', 'N/A')} bytes")
+                print(f"Rate In: {bw_stats.get('RateIn', 'N/A')} bytes/s")
+                print(f"Rate Out: {bw_stats.get('RateOut', 'N/A')} bytes/s")
+            else:
+                print(f"Failed to get Bandwidth Stats. Status Code: {bw_response.status_code}")
+            if repo_response.status_code == 200:
+                repo_stats = repo_response.json()
+
+                print(f"Repo Size: {repo_stats.get('RepoSize', 'N/A')} bytes")
+                print(f"Repo Path: {repo_stats.get('RepoPath', 'N/A')}")
+                print(f"Num Objects: {repo_stats.get('NumObjects', 'N/A')}")
+                print(f"Storage Max: {repo_stats.get('StorageMax', 'N/A')} bytes")
+                print("")
+            else:
+                print(f"Failed to get Repository Stats. Status Code: {repo_response.status_code}")
+
+        except Exception as e:
+            print(f"An error occurred while fetching stats: {e}")
+
+
 class ExistingPostRoutines:
 
     @staticmethod
@@ -892,6 +1009,8 @@ def elaborate_directory(__set_directory):
         image_urls, video_urls = Cyberdrop.upload_images_to_cyberdrop(file_names, __set_directory, errors_list)
     elif STORAGE_CHOICE == 'imgbb':
         image_urls, video_urls = Imgbb.upload_images_to_imgbb(file_names, __set_directory, errors_list)
+    elif STORAGE_CHOICE == 'ipfs':
+        image_urls, video_urls = IPFS.upload_images_to_ipfs(file_names, __set_directory, errors_list)
     else:
         logger.error(f"Invalid storage choice: {STORAGE_CHOICE}")
         return None, 0
