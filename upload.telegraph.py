@@ -7,12 +7,7 @@ import sys
 # ======================================================================
 # ======================================================================
 
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "Pillow==10.4.0"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "validators==0.34.0"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "requests==2.32.3"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "selenium==4.24.0", "webdriver-manager==4.0.2"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "ipfshttpclient==0.7.0"])
-subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "telegraph==2.2.0"])
+subprocess.check_call([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--upgrade", "Pillow==10.4.0", "validators==0.34.0", "requests==2.32.3", "selenium==4.24.0", "webdriver-manager==4.0.2", "telegraph==2.2.0"])
 
 # ======================================================================
 # ======================================================================
@@ -27,6 +22,7 @@ import logging.handlers
 import urllib.request
 import requests
 import re
+import json
 
 
 # =========== Do not change anything outside this block ===========
@@ -93,7 +89,8 @@ class ReadArgs:
     page=''
     page_down=''
     list_down=''
-
+    ipfs_stats = False
+    ipfs_node_size = ''
 
 
 
@@ -257,18 +254,29 @@ class Utils:
         parser.add_argument('-he', '--height', help='↑ Maximum image height', type=int)
         parser.add_argument('-wi', '--width', help='↑ Maximum image width', type=int)
         parser.add_argument('-s', '--size', help='← Maximum image file size', type=int)
+        parser.add_argument('--ipfs-stats', help='Retrieve IPFS node stats', action='store_true')
+        parser.add_argument('--ipfs-node-size', help='Set IPFS node size', type=str)
 
         parser.error = Utils.parse_error
+        args, unknown = parser.parse_known_args()
 
         args = None
         try:
-            args = parser.parse_args()
-        except TypeError:
+            args, unknown = parser.parse_known_args()
+        except (TypeError, argparse.ArgumentError, argparse.ArgumentTypeError):
             logger.info('')
             logger.info('')
             parser.print_help()
             os._exit(2)
-            pass
+        except Exception as _e:
+            logger.error(f"An unexpected error occurred: {_e}")
+            parser.print_help()
+            os._exit(2)
+
+        if unknown:
+            sys.stderr.write(f"\n\nArguments are invalid:\n     unrecognized arguments: {' '.join(unknown)}\n\n")
+            parser.print_help()
+            sys.exit(2)
 
         __args = ReadArgs()
 
@@ -282,6 +290,8 @@ class Utils:
         __args.page = args.page
         __args.page_down = args.page_download
         __args.list_down = args.list_download
+        __args.ipfs_stats = args.ipfs_stats
+        __args.ipfs_node_size = args.ipfs_node_size
 
         return __args
 
@@ -330,11 +340,12 @@ class Utils:
             HEIGHT = args.height
 
         if width_set or height_set:
-            global DIMENSIONS_OVERWRITTEN
+            global DIMENSIONS_OVERWRITTEN,WIDTH,HEIGHT
             DIMENSIONS_OVERWRITTEN = True
             if WIDTH * HEIGHT >= TOTAL_DIMENSION_THRESHOLD:
                 logger.warning("======== Warning ========")
-                logger.warning("The selected dimensions are greater than 10,000 pixels in total. The server will most likely reject these options.")
+                logger.warning(
+                    f"The selected dimensions are greater than {TOTAL_DIMENSION_THRESHOLD} pixels in total. The server will most likely reject these options.")
                 logger.warning("")
 
         if Utils.validate_natural(args.size):
@@ -615,11 +626,11 @@ class Cyberdrop:
                     upload_paths.append(upload_path)
 
                 if len(upload_paths) == batch_size:
-                    Cyberdrop.process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls)
+                    Cyberdrop.process_batch_upload(upload_paths, server_url, errors, image_urls, video_urls)
                     upload_paths.clear()
 
             if upload_paths:
-                Cyberdrop.process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls)
+                Cyberdrop.process_batch_upload(upload_paths, server_url, errors, image_urls, video_urls)
 
         finally:
             driver.quit()
@@ -663,7 +674,7 @@ class Cyberdrop:
             return None
 
     @staticmethod
-    def process_batch_upload(upload_paths, server_url, driver, errors, image_urls, video_urls):
+    def process_batch_upload(upload_paths, server_url, errors, image_urls, video_urls):
         response = Cyberdrop.upload_file_to_cyberdrop(upload_paths, server_url, errors)
         if response is not None:
             slugs = [file_info["url"].split("/")[-1] for file_info in response["files"]]
@@ -814,8 +825,8 @@ class IPFS:
                         logger.info(f"Successfully uploaded to {gateway_url}, CID: {cid}")
                         return cid
                 logger.error(f"Failed to upload to {gateway_url}, Status Code: {response.status_code} - {response.content}")
-        except Exception as e:
-            logger.error(f"Error uploading to {gateway_url}: {e}")
+        except Exception as _e:
+            logger.error(f"Error uploading to {gateway_url}: {_e}")
         return None
 
     @staticmethod
@@ -855,6 +866,9 @@ class IPFS:
 
     @staticmethod
     def upload_images_to_ipfs(file_names, directory, errors):
+        global PAUSE
+        PAUSE = 0
+
         image_urls, video_urls = [],[]
         try:
             for file_name in file_names:
@@ -867,8 +881,7 @@ class IPFS:
     @staticmethod
     def pin_file(cid, errors):
         try:
-            url = f"http://127.0.0.1:5001/api/v0/pin/add?arg={cid}"
-            response = requests.post(url)
+            response = requests.post(f"http://127.0.0.1:5001/api/v0/pin/add?arg={cid}")
 
             if response.status_code == 200:
                 logger.info(f"Successfully pinned CID: {cid}")
@@ -879,9 +892,9 @@ class IPFS:
                 errors.append(f"Pinning failed for CID: {cid}. Status Code: {response.status_code}")
                 return False
 
-        except Exception as e:
-            logger.error(f"Error pinning file to IPFS: {e}")
-            errors.append(f"Error pinning file to IPFS: {e}")
+        except Exception as _e:
+            logger.error(f"Error pinning file to IPFS: {_e}")
+            errors.append(f"Error pinning file to IPFS: {_e}")
             return False
 
     @staticmethod
@@ -889,16 +902,19 @@ class IPFS:
         try:
             bw_response = requests.post(f"http://127.0.0.1:5001/api/v0/stats/bw")
             repo_response = requests.post(f"http://127.0.0.1:5001/api/v0/repo/stat")
+            pinned_response = requests.post("http://127.0.0.1:5001/api/v0/pin/ls?type=all")
 
             if bw_response.status_code == 200:
                 bw_stats = bw_response.json()
 
+                print(f"\n========== Local IPFS data ==========\n")
                 print(f"Total In: {bw_stats.get('TotalIn', 'N/A')} bytes")
                 print(f"Total Out: {bw_stats.get('TotalOut', 'N/A')} bytes")
                 print(f"Rate In: {bw_stats.get('RateIn', 'N/A')} bytes/s")
                 print(f"Rate Out: {bw_stats.get('RateOut', 'N/A')} bytes/s")
             else:
                 print(f"Failed to get Bandwidth Stats. Status Code: {bw_response.status_code}")
+
             if repo_response.status_code == 200:
                 repo_stats = repo_response.json()
 
@@ -910,8 +926,70 @@ class IPFS:
             else:
                 print(f"Failed to get Repository Stats. Status Code: {repo_response.status_code}")
 
-        except Exception as e:
-            print(f"An error occurred while fetching stats: {e}")
+            if pinned_response.status_code == 200:
+                pinned_files = pinned_response.json().get("Keys", {})
+                print(f"Number of pinned files: {len(pinned_files)}")
+            else:
+                print(f"Failed to get pinned files. Status Code: {pinned_response.status_code}")
+
+            print(f"\n=====================================\n")
+
+        except Exception as _e:
+            print(f"An error occurred while fetching stats: {_e}")
+
+    @staticmethod
+    def get_ipfs_repo_path():
+        try:
+            response = requests.post("http://127.0.0.1:5001/api/v0/repo/stat")
+            if response.status_code == 200:
+                repo_stat = response.json()
+                repo_path = repo_stat.get('RepoPath')
+                if repo_path:
+                    return repo_path
+                else:
+                    print("RepoPath not found in the response.")
+            else:
+                print(f"Failed to get repo stats. Status Code: {response.status_code}")
+        except Exception as _e:
+            print(f"Error fetching repo stats: {_e}")
+        return None
+
+    @staticmethod
+    def update_storage_max(repo_path, storage_max):
+
+        print(f"\n\n")
+        config_file_path = os.path.join(repo_path, "config")
+        if not os.path.exists(config_file_path):
+            print(f"Config file not found at {config_file_path}")
+            return
+
+        try:
+            with open(config_file_path, "r") as config_file:
+                config_data = json.load(config_file)
+
+            current_storage_max = config_data['Datastore'].get('StorageMax')
+
+            if current_storage_max == storage_max:
+                print(f"StorageMax is already set to {storage_max}. No changes needed.")
+                return
+
+            config_data['Datastore']['StorageMax'] = storage_max
+
+            with open(config_file_path, "w") as config_file:
+                json.dump(config_data, config_file, indent=2)
+            print(f"StorageMax successfully updated to {storage_max}\nNode should restarted")
+
+        except Exception as _e:
+            print(f"Error updating config file: {_e}")
+
+    @staticmethod
+    def set_ipfs_node_size(storage_max_value):
+        # use set IPFS_PATH = D:\CustomIPFS to set up ipfs folder location
+        repo_path = IPFS.get_ipfs_repo_path()
+        if repo_path:
+            IPFS.update_storage_max(repo_path, storage_max_value)
+
+        print()
 
 
 class ExistingPostRoutines:
@@ -1071,6 +1149,14 @@ logger = Utils.setup_logger()
 
 try:
     read_args = Utils.read_validate_input()
+
+    if read_args.ipfs_stats:
+        IPFS.print_ipfs_stats()
+        os._exit(0)
+
+    if read_args.ipfs_node_size:
+        IPFS.set_ipfs_node_size(read_args.ipfs_node_size)
+        os._exit(0)
 
     os.chdir(read_args.input_folder)
 
