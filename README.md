@@ -2,6 +2,19 @@
 
 Simple script for creating a picture gallery as a Telegra.ph page based on [python273/telegraph](https://github.com/python273/telegraph/releases/tag/v1.4.1)
 
+#### Update:
+For now, the Telegraph is restricted from uploading media, so three new sources have been added to store the media.
+Storages can be chosen in the script by the specific variable:
+```
+# STORAGE_CHOICE = "ipfs"
+STORAGE_CHOICE = "imgbb"
+# STORAGE_CHOICE = "cyberdrop"
+```
+- Cyberdrop does not allow direct linking so that the gallery will be a page with thumbnails.
+- IPFS storage requires running its own node. For example [IPFS Desktop](https://docs.ipfs.tech/how-to/desktop-app/#install-ipfs-desktop).
+Without a pin to public nodes, images will be available online in a few dozen minutes. After that, the node requires regular startup to maintain the content's online status.
+- [IMGBB](https://imgbb.com/) does not require anything, but on the free tier, it will start upload throttling after ~500 images (with an hour or more timeout).
+
 ## Options:
 
 |  |  |  |
